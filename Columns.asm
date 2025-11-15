@@ -34,8 +34,10 @@ COLOUR_YELLOW:      .word 0x00FFFF00
 # Game State
 # -----------------------------------------------------------------------
 # Current cursor position on the game grid (column and row)
-cursor_col: .word 0
-cursor_row: .word 0
+cursor_col:         .word 0
+cursor_row:         .word 0
+last_cursor_col:    .word 0
+last_cursor_row:    .word 0
 
 # -----------------------------------------------------------------------
 # Keyboard ASCII Values
@@ -88,7 +90,6 @@ game_loop:
     jal update_game_logic
     
     # 3. Redraw the Screen
-    jal clear_screen
     jal draw_board
     
     # 4. Delay to control game speed (game tick)
@@ -119,7 +120,7 @@ update_game_logic:
     # - Spawning new pieces
     
     # For now, it just draws the cursor for demonstration.
-    jal draw_cursor
+    j update_cursor
     
 end_update_game_logic:
     # --- RESTORE REGISTERS ---
@@ -127,13 +128,57 @@ end_update_game_logic:
     addi    $sp, $sp, 4
     
     jr     $ra
-
+    
 # -----------------------------------------------------------------------
-# draw_cursor: Places a block of the current color at the cursor's
+# set_board_value: Sets the value at a specified location on the board
+# Arguments:
+#   $a0 - x coordinate (0-5)
+#   $a1 - y coordinate (0-12)
+#   $a2 - type (0-6)
+# -----------------------------------------------------------------------
+set_board_value:
+    # -- SAVE REGISTERS ---
+    addi $sp, $sp, -20
+    sw   $ra, 0($sp)
+    sw   $t0, 4($sp)
+    sw   $t1, 8($sp)
+    sw   $t2, 12($sp)
+    sw   $t3, 16($sp)
+    
+    # Calculate the 1D array index from the 2D grid position:
+    # index = row * 6 + col
+    li   $t0, 6
+    mul  $t1, $t0, $a1
+    add  $t1, $t1, $a0
+    
+    # Convert index to a byte offset: offset = index * 4
+    sll  $t1, $t1, 2
+    
+    # Get the base address of the game board and add the offset
+    la   $t2, game_board
+    add  $t2, $t2, $t1
+    
+    # Overwrite the block at $a1 * 6 + $a0 with $a2
+    sw   $a2, 0($t2)
+
+    
+end_set_board_value:
+    # --- RESTORE REGISTERS ---
+    lw   $ra, 0($sp)
+    lw   $t0, 4($sp)
+    lw   $t1, 8($sp)
+    lw   $t2, 12($sp)
+    lw   $t3, 16($sp)
+    addi $sp, $sp, 20
+    
+    jr $ra
+    
+# -----------------------------------------------------------------------
+# update_cursor: Places a block of the current color at the cursor's
 #              position on the game board. This is a placeholder for
 #              spawning new pieces.
 # -----------------------------------------------------------------------
-draw_cursor:
+update_cursor:
     # --- SAVE REGISTERS ---
     addi $sp, $sp, -24
     sw   $ra, 0($sp)
@@ -142,40 +187,38 @@ draw_cursor:
     sw   $t2, 12($sp)
     sw   $t3, 16($sp)
     sw   $t4, 20($sp)
-
-    # Get current cursor position
-    lw   $t0, cursor_row
-    lw   $t1, cursor_col
     
-    # Calculate the 1D array index from the 2D grid position:
-    # index = row * 6 + col
-    li   $t2, 6
-    mul  $t3, $t0, $t2
-    add  $t3, $t3, $t1
-    
-    # Convert index to a byte offset: offset = index * 4
-    sll  $t3, $t3, 2
-    
-    # Get the base address of the game board and add the offset
-    la   $t4, game_board
-    add  $t4, $t4, $t3
-    
+    lw   $s0, cursor_col
+    lw   $s1, cursor_row
     # -- TEMPORARY CURSOR LOGIC --
-    # Check if the cell is already occupied. If so, don't place a block.
-    lw   $t5, 0($t4)
-    bne  $t5, $zero, end_draw_cursor
-    
     # Place a blue block (value 1) at the cursor position.
     # TODO: This should be replaced with the color of the falling piece.
     #       The bottom square of a piece should be the location of the cursor,
     #       Then, we only have to check collision at that one location
     #       This way, we only need to draw at and above the cursor for the cur piece
-    li   $t5, 1
-    sw   $t5, 0($t4)
+    lw   $a0, cursor_col
+    lw   $a1, cursor_row
+    li   $a2, 1
+    jal set_board_value
     
-    j end_draw_cursor
+    # If the cursor position just changed, 
+    # then fill the prev location with void
+    lw   $a0, last_cursor_col
+    lw   $a1, last_cursor_row
+    li   $a2, 0
+    bne $s0, $a0, backfill_cursor
+    bne $s1, $a1, backfill_cursor
+    
+    j end_update_cursor
+    
+backfill_cursor:
+    jal set_board_value
+    sw $s0, last_cursor_col
+    sw $s1, last_cursor_row
+    
+    j end_update_cursor
 
-end_draw_cursor:
+end_update_cursor:
     # --- RESTORE REGISTERS ---
     lw   $ra, 0($sp)
     lw   $t0, 4($sp)
@@ -369,7 +412,7 @@ end_clear:
     jr $ra
     
 # -----------------------------------------------------------------------
-# draw_pixel: Draws a single pixel on the screen. (Safe Version)
+# draw_pixel: Draws a single pixel on the screen.
 # Arguments:
 #   $a0 - x coordinate (0-63)
 #   $a1 - y coordinate (0-63)

@@ -8,7 +8,7 @@
 #   If a function needs the argument, save it as $s[0-7]
 # Assume temporaries $t[0-9] can be modified after a function call, 
 #   if you want to preserve values use $s[0-7] instead
-# We enforce that saved registed $s[0-7] should NOT be modifed after a function call
+# We enforce that saved registers $s[0-7] should NOT be modifed after a function call
 #   functions that modify them MUST save and load their values from the stack
 # If the function does jal, MAKE SURE TO SAVE THE ra in mem at the start 
 #   of the function call and load from mem at the end
@@ -154,7 +154,7 @@ end_update_game_logic:
 # -----------------------------------------------------------------------
 set_board_value:
     # -- SAVE REGISTERS ---
-    addi $sp, $sp, -20
+    addi $sp, $sp, -4
     sw   $ra, 0($sp)
     
     # Calculate the 1D array index from the 2D grid position:
@@ -176,7 +176,7 @@ set_board_value:
 end_set_board_value:
     # --- RESTORE REGISTERS ---
     lw   $ra, 0($sp)
-    addi $sp, $sp, 20
+    addi $sp, $sp, 4
     
     jr $ra
     
@@ -469,7 +469,7 @@ draw_pixel:
     # --- SAVE REGISTERS ---
     # Save any temporary registers we are about to modify ($t0, $t1, $t2)
     # as well as the return address ($ra).
-    addi  $sp, $sp, -16
+    addi  $sp, $sp, -4
     sw    $ra, 0($sp)
 
     # --- FUNCTION BODY ---
@@ -484,7 +484,7 @@ draw_pixel:
 
     # --- RESTORE REGISTERS ---
     lw    $ra, 0($sp)
-    addi  $sp, $sp, 16
+    addi  $sp, $sp, 4
 
     jr    $ra
 

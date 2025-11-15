@@ -78,18 +78,32 @@ main:
     # Initialization: These functions run once at the start.
     jal clear_screen
     jal draw_board
+    # TODO:
+    # - Populate first column slot
+    # -- TEMPORARY DEBUG --
+    li $a0 2
+    li $a1 2
+    li $a2 2
+    jal set_board_value
 
 # =======================================================================
 # Main Game Loop
 # =======================================================================
 game_loop:
-    # 1. Handle User Input
+    # TODO:
+    # - Add cycling inputs
     jal handle_input
 
-    # 2. Update Game State
+    # TODO:
+    # - Gravity logic
+    # - Draw columns as 1x3 instead of 1x1
+    # - Add random select
     jal update_game_logic
     
-    # 3. Redraw the Screen
+    # TODO:
+    # - Update game screen
+    # - Add next column display
+    # - Scale up display?
     jal draw_board
     
     # 4. Delay to control game speed (game tick)
@@ -174,6 +188,50 @@ end_set_board_value:
     jr $ra
     
 # -----------------------------------------------------------------------
+# read_board_value: Check the value at a specified location on the board
+# Arguments:
+#   $a0 - x coordinate (0-5)
+#   $a1 - y coordinate (0-12)
+# Return:
+#   $v0 - type (0-6)
+# -----------------------------------------------------------------------
+read_board_value:
+    # -- SAVE REGISTERS ---
+    addi $sp, $sp, -20
+    sw   $ra, 0($sp)
+    sw   $t0, 4($sp)
+    sw   $t1, 8($sp)
+    sw   $t2, 12($sp)
+    sw   $t3, 16($sp)
+    
+    # Calculate the 1D array index from the 2D grid position:
+    # index = row * 6 + col
+    li   $t0, 6
+    mul  $t1, $t0, $a1
+    add  $t1, $t1, $a0
+    
+    # Convert index to a byte offset: offset = index * 4
+    sll  $t1, $t1, 2
+    
+    # Get the base address of the game board and add the offset
+    la   $t2, game_board
+    add  $t2, $t2, $t1
+    
+    # Load the block at $a1 * 6 + $a0
+    lw   $v0, 0($t2)
+
+end_read_board_value:
+    # --- RESTORE REGISTERS ---
+    lw   $ra, 0($sp)
+    lw   $t0, 4($sp)
+    lw   $t1, 8($sp)
+    lw   $t2, 12($sp)
+    lw   $t3, 16($sp)
+    addi $sp, $sp, 20
+    
+    jr $ra
+    
+# -----------------------------------------------------------------------
 # update_cursor: Places a block of the current color at the cursor's
 #              position on the game board. This is a placeholder for
 #              spawning new pieces.
@@ -239,7 +297,9 @@ end_update_cursor:
 #               handler function.
 # -----------------------------------------------------------------------
 handle_input:
-    # --- SAVE REGISTERS (none needed, uses only $t regs) ---
+    # --- SAVE REGISTERS ---
+    addi $sp, $sp, -4
+    sw $ra, 0($sp)
 
     # Load address of the keyboard flag
     lw $t0, KEYBOARD_FLAG
@@ -287,13 +347,19 @@ move_up:
     sw   $t1, 4($sp)
 
     # Load the current row and check if it's already at the top (0).
-    la   $t0, cursor_row
-    lw   $t1, 0($t0)
-    beq  $t1, $zero, move_up_done # If row is 0, do nothing.
+    lw   $t0, cursor_row
+    beq  $t0, $zero, move_up_done # If row is 0, do nothing.
     
     # Decrement the row and save it back to memory.
-    addi $t1, $t1, -1
-    sw   $t1, 0($t0)
+    addi $t0, $t0, -1
+    
+    # Check collision
+    lw $a0, cursor_col
+    add $a1, $zero, $t0
+    jal read_board_value
+    bne $v0, $zero, move_up_done
+    
+    sw   $t0, cursor_row
 
 move_up_done:
     # --- RESTORE REGISTERS ---
@@ -313,14 +379,20 @@ move_down:
     sw   $t2, 8($sp)
 
     # Load the current row and check if it's at the bottom (12).
-    la   $t0, cursor_row
-    lw   $t1, 0($t0)
-    li   $t2, 12                    # Max row index is 12 (for a 13-row grid)
-    beq  $t1, $t2, move_down_done   # If row is 12, do nothing.
+    lw   $t0, cursor_row
+    li   $t1, 12                    # Max row index is 12 (for a 13-row grid)
+    beq  $t0, $t1, move_down_done   # If row is 12, do nothing.
     
     # Increment the row and save it back to memory.
-    addi $t1, $t1, 1
-    sw   $t1, 0($t0)
+    addi $t0, $t0, 1
+    
+    # Check collision
+    lw $a0, cursor_col
+    add $a1, $zero, $t0
+    jal read_board_value
+    bne $v0, $zero, move_down_done
+    
+    sw   $t0, cursor_row
 
 move_down_done:
     # --- RESTORE REGISTERS ---
@@ -340,13 +412,18 @@ move_left:
     sw   $t1, 4($sp)
 
     # Load the current column and check if it's at the left edge (0).
-    la   $t0, cursor_col
-    lw   $t1, 0($t0)
-    beq  $t1, $zero, move_left_done # If col is 0, do nothing.
+    lw   $t0, cursor_col
+    beq  $t0, $zero, move_left_done # If col is 0, do nothing.
     
     # Decrement the column and save it back to memory.
-    addi $t1, $t1, -1
-    sw   $t1, 0($t0)
+    addi $t0, $t0, -1
+    
+    add $a0, $zero, $t0
+    lw $a1, cursor_row
+    jal read_board_value
+    bne $v0, $zero, move_left_done
+    
+    sw $t0, cursor_col
 
 move_left_done:
     # --- RESTORE REGISTERS ---
@@ -366,14 +443,21 @@ move_right:
     sw   $t2, 8($sp)
 
     # Load the current column and check if it's at the right edge (5).
-    la   $t0, cursor_col
-    lw   $t1, 0($t0)
-    li   $t2, 5                     # Max col index is 5 (for a 6-column grid)
-    beq  $t1, $t2, move_right_done  # If col is 5, do nothing.
+    lw   $t0, cursor_col
+    li   $t1, 5                     # Max col index is 5 (for a 6-column grid)
+    beq  $t0, $t1, move_right_done  # If col is 5, do nothing.
     
     # Increment the column and save it back to memory.
-    addi $t1, $t1, 1
-    sw   $t1, 0($t0)
+    addi $t0, $t0, 1
+    
+    # Check if new space is occupied
+    add   $a0, $zero, $t0
+    lw   $a1, cursor_row
+    jal  read_board_value
+    bne  $v0, $zero, move_right_done
+    
+    # Update cursor col
+    sw   $t0, cursor_col
 
 move_right_done:
     # --- RESTORE REGISTERS ---
@@ -387,6 +471,10 @@ move_right_done:
 # input_done: Common return point for all input handlers.
 # -----------------------------------------------------------------------
 input_done:
+    # --- RESTORE REGISTERS ---
+    lw $ra, 0($sp)
+    addi $sp, $sp, 4
+
     jr $ra
 
 

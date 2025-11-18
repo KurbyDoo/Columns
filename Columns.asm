@@ -1,6 +1,6 @@
 # CSC258 Project: Columns
 # Student 1: Cayden Wong 1010871139
-# Student 2: 
+# Student 2: William Wu 1008956685
 
 
 # Structure / Style assumptions
@@ -13,10 +13,13 @@
 # If the function does jal, MAKE SURE TO SAVE THE ra in mem at the start 
 #   of the function call and load from mem at the end
 
+
+
 .data
 # -----------------------------------------------------------------------
 # Memory-Mapped I/O and Constants
 # -----------------------------------------------------------------------
+# Debug string
 # Display and Input Addresses
 DISPLAY_ADDRESS:    .word 0x10008000 # Address specified in the bitmap tab
 KEYBOARD_FLAG:      .word 0xffff0000 # Address that signals a key has been pressed
@@ -41,6 +44,8 @@ cursor_row:         .word 0
 last_cursor_col:    .word 0
 last_cursor_row:    .word 0
 
+piece_placed_flag:  .word 0 
+
 # -----------------------------------------------------------------------
 # Keyboard ASCII Values
 # -----------------------------------------------------------------------
@@ -48,6 +53,9 @@ KEY_UP:    .word 0x77 # 'w'
 KEY_DOWN:  .word 0x73 # 's'
 KEY_LEFT:  .word 0x61 # 'a'
 KEY_RIGHT: .word 0x64 # 'd'
+
+KEY_Z: .word 0x7A # 'z'
+KEY_Q: .word 0x71 # 'q'
 
 # -----------------------------------------------------------------------
 # Game Board Representation
@@ -62,8 +70,11 @@ KEY_RIGHT: .word 0x64 # 'd'
 # 4: ORANGE
 # 5: PURPLE
 # 6: YELLOW
-game_board: .space 312 # 13 rows * 6 columns * 4 bytes/cell
+game_board:         .space 312 # 13 rows * 6 columns * 4 bytes/cell
+removal_game_board: .space 312 # 13 rows * 6 columns * 4 bytes/cell
 
+curr_column_colours: .space 12 # 3 columns * 4 bytes/cell
+next_column_colours: .space 12 # 3 columns * 4 bytes/cell
 # -----------------------------------------------------------------------
 # Debugging Messages
 # -----------------------------------------------------------------------
@@ -73,6 +84,11 @@ newline: .asciiz "\n"
 
 .text
 .globl main
+
+# li $v0, 1           # syscall 1 = print integer
+# li $a0, 42          # value to print
+# syscall
+
 # =======================================================================
 # Main Program Entry Point
 # =======================================================================
@@ -82,11 +98,21 @@ main:
     jal draw_board
     # TODO:
     # - Populate first column slot
-    # -- TEMPORARY DEBUG --
-    li $a0 2
-    li $a1 2
-    li $a2 2
+        
+    li $a0, 5
+    li $a1, 12
+    li $a2, 1
     jal set_board_value
+    
+    li $a0, 5
+    li $a1, 11
+    li $a2, 1
+    jal set_board_value
+    
+    sw $zero, piece_placed_flag
+    
+    jal generate_next_column
+    jal generate_next_column
 
 # =======================================================================
 # Main Game Loop
@@ -98,8 +124,6 @@ game_loop:
 
     # TODO:
     # - Gravity logic
-    # - Draw columns as 1x3 instead of 1x1
-    # - Add random select
     jal update_game_logic
     
     # TODO:
@@ -134,9 +158,13 @@ update_game_logic:
     # - Making pieces fall
     # - Checking for matches
     # - Spawning new pieces
+    jal check_for_matching
+    jal remove_marked_squares
+    jal remove_empty_gaps
     
+game_logic_skip_clear:
     # For now, it just draws the cursor for demonstration.
-    j update_cursor
+    jal update_cursor
     
 end_update_game_logic:
     # --- RESTORE REGISTERS ---
@@ -144,6 +172,42 @@ end_update_game_logic:
     addi    $sp, $sp, 4
     
     jr     $ra
+
+# -----------------------------------------------------------------------
+# set_removal_board_value: Sets the value at a specified location on the board
+# Arguments:
+#   $a0 - x coordinate (0-5)
+#   $a1 - y coordinate (0-12)
+#   $a2 - T/F (1/0)
+# -----------------------------------------------------------------------
+set_removal_board_value:
+    # -- SAVE REGISTERS ---
+    addi $sp, $sp, -4
+    sw   $ra, 0($sp)
+    
+    # Calculate the 1D array index from the 2D grid position:
+    # index = row * 6 + col
+    li   $t0, 6
+    mul  $t1, $t0, $a1
+    add  $t1, $t1, $a0
+    
+    # Convert index to a byte offset: offset = index * 4
+    sll  $t1, $t1, 2
+    
+    # Get the base address of the game board and add the offset
+    la   $t2, removal_game_board
+    add  $t2, $t2, $t1
+    
+    # Overwrite the block at $a1 * 6 + $a0 with $a2
+    sw   $a2, 0($t2)
+    
+    
+end_set_removal_board_value:
+    # --- RESTORE REGISTERS ---
+    lw   $ra, 0($sp)
+    addi $sp, $sp, 4
+    
+    jr $ra
     
 # -----------------------------------------------------------------------
 # set_board_value: Sets the value at a specified location on the board
@@ -172,6 +236,7 @@ set_board_value:
     
     # Overwrite the block at $a1 * 6 + $a0 with $a2
     sw   $a2, 0($t2)
+    
     
 end_set_board_value:
     # --- RESTORE REGISTERS ---
@@ -234,23 +299,61 @@ update_cursor:
     #       The bottom square of a piece should be the location of the cursor,
     #       Then, we only have to check collision at that one location
     #       This way, we only need to draw at and above the cursor for the cur piece
-    lw   $a0, cursor_col
-    lw   $a1, cursor_row
-    li   $a2, 1
-    jal set_board_value
     
-    # If the cursor position just changed, 
-    # then fill the prev location with void
+
+backfill_cursor: 
     lw   $a0, last_cursor_col
     lw   $a1, last_cursor_row
     li   $a2, 0
-    bne $s0, $a0, backfill_cursor
-    bne $s1, $a1, backfill_cursor
-    
-    j end_update_cursor
-    
-backfill_cursor:
     jal set_board_value
+    
+    lw   $a0, last_cursor_col
+    lw   $a1, last_cursor_row
+    li   $a2, 0
+    # check if a1 is 0: a1 cannot go to negative
+    beq  $a1, 0, draw_new_cursor 
+    addi $a1, $a1, -1
+    jal set_board_value
+    
+    lw   $a0, last_cursor_col
+    lw   $a1, last_cursor_row
+    li   $a2, 0
+    # check if a1 is 0: a1 cannot go to negative
+    beq  $a1, 1, draw_new_cursor 
+    addi $a1, $a1, -2
+    jal set_board_value
+    
+    
+draw_new_cursor:
+    la $t0, curr_column_colours
+    
+    lw   $a0, cursor_col
+    lw   $a1, cursor_row
+    lw   $a2, 0($t0)
+    jal set_board_value
+    
+    la $t0, curr_column_colours
+
+    lw   $a0, cursor_col
+    lw   $a1, cursor_row
+    lw   $a2, 4($t0)
+    # check if a1 is 0: a1 cannot go to negative
+    beq  $a1, 0, done_drawing_cursor 
+    addi $a1, $a1, -1
+    jal set_board_value
+    
+    la $t0, curr_column_colours
+    
+    lw   $a0, cursor_col
+    lw   $a1, cursor_row
+    lw   $a2, 8($t0)
+    # check if a1 is 0: a1 cannot go to negative
+    beq  $a1, 1, done_drawing_cursor 
+    addi $a1, $a1, -2
+    jal set_board_value
+    
+done_drawing_cursor:
+    # Save new position of last_cursor row and col
     sw $s0, last_cursor_col
     sw $s1, last_cursor_row
     
@@ -263,6 +366,366 @@ end_update_cursor:
     
     jr   $ra
 
+generate_next_column:
+    #TODO: Move random function to its own function
+    addi  $sp, $sp, -4
+    sw    $ra, 0($sp)
+    
+    la    $t0, curr_column_colours       # Load current column 
+    la    $t1, next_column_colours       # Load next column
+    
+    #shift next column into current column
+    lw   $t2, 0($t1)
+    sw   $t2, 0($t0)
+    
+    lw   $t2, 4($t1)
+    sw   $t2, 4($t0)
+    
+    lw   $t2, 8($t1)
+    sw   $t2, 8($t0)
+    
+    li $v0, 42
+    li $a0, 0
+    li $a1, 6
+    syscall
+    #return val in a0
+    addi $a0, $a0, 1
+    
+    sw $a0, 0($t1)
+    
+    li $v0, 42
+    li $a0, 0
+    li $a1, 6
+    syscall
+    #return val in a0
+    addi $a0, $a0, 1
+    
+    sw $a0, 4($t1)
+    
+    li $v0, 42
+    li $a0, 0
+    li $a1, 6
+    syscall
+    #return val in a0
+    addi $a0, $a0, 1
+    
+    sw $a0, 8($t1)
+
+    lw $ra 0($sp)
+    addi $sp, $sp, 4
+    
+    jr $ra
+    
+shift_current_column:
+    addi  $sp, $sp, -4
+    sw    $ra, 0($sp)
+    
+    la $t0, curr_column_colours
+    lw $t1, 0($t0)
+    lw $t2, 4($t0)
+    lw $t3, 8($t0)
+    
+    sw $t1, 8($t0)
+    sw $t2, 0($t0)
+    sw $t3, 4($t0)
+    
+    lw $ra 0($sp)
+    addi $sp, $sp, 4
+    jr $ra
+    
+# -----------------------------------------------------------------------
+# check_for_matching: Mark board matches for removal
+# -----------------------------------------------------------------------
+check_for_matching:
+    addi  $sp, $sp, -8
+    sw    $ra, 0($sp)
+    sw    $s0, 4($sp) # loop var
+    
+    # If the flag is zero, then we didnt place a piece
+    lw $t0, piece_placed_flag
+    beq $zero, $t0, end_check_for_matching
+    
+    # We check all columns and all rows
+    jal check_rows_for_matching
+    jal check_cols_for_matching
+    
+    j end_check_for_matching
+
+end_check_for_matching:
+    # --- RESTORE REGISTERS ---
+    lw $ra, 0($sp)
+    lw $s0, 4($sp)
+    addi $sp, $sp, 8
+    jr $ra
+
+# -----------------------------------------------------------------------
+# check_rows_for_matching: Check rows
+# -----------------------------------------------------------------------
+check_rows_for_matching:
+    addi  $sp, $sp, -20
+    sw    $ra, 0($sp)
+    sw    $s0, 4($sp) # cur row
+    sw    $s1, 8($sp) # cur pos
+    sw    $s2, 12($sp) # seq count
+    sw    $s3, 16($sp) # cur color
+    
+    li $s0, 0
+check_row_for_matching:
+    li $s2, 0
+    li $s1, 0 # pos in row
+check_row_square_for_match:
+    # Arguments:
+    #   $a0 - x coordinate (0-5)
+    #   $a1 - y coordinate (0-12)
+    # Return:
+    #   $v0 - type (0-6)
+    add     $a0, $zero, $s1
+    add   $a1, $zero, $s0
+    jal   read_board_value
+    
+    # Skip if colours are the same, otherwise reset
+    beq $v0, $s3, check_row_square_for_match_skip_color
+    li $s2, 0
+    add $s3, $zero, $v0
+    
+check_row_square_for_match_skip_color:
+    # cap incremeent at 3
+    li $t0, 3
+    beq $s2, $t0, check_row_square_for_match_skip_increment
+    addi $s2, $s2, 1
+    
+check_row_square_for_match_skip_increment:
+    # if not 3 stored skip backfill
+    li $t0, 3
+    bne $s2, $t0, check_row_square_for_match_skip_fill
+    # skip if colour is black
+    beq $s3, $zero, check_row_square_for_match_skip_fill
+    
+    # Fill the past 3 squares with 0
+    addi $a0, $s1, 0
+    addi $a1, $s0, 0
+    li $a2, 1
+    jal set_removal_board_value
+    addi $a0, $s1, -1
+    addi $a1, $s0, 0
+    li $a2, 1
+    jal set_removal_board_value
+    addi $a0, $s1, -2
+    addi $a1, $s0, 0
+    li $a2, 1
+    jal set_removal_board_value
+    
+check_row_square_for_match_skip_fill:
+    # incremenet x, != 6 go back
+    addi $s1, $s1, 1
+    li $t8, 6
+    bne $s1, $t8, check_row_square_for_match
+
+    # increment row
+    addi $s0, $s0, 1
+    li $t9, 13
+    bne $s0, $t9, check_row_for_matching
+    
+    j end_check_rows_for_matching
+    
+end_check_rows_for_matching:
+    lw $ra, 0($sp)
+    lw $s0, 4($sp)
+    lw $s1, 8($sp)
+    lw $s2, 12($sp)
+    lw $s3, 16($sp)
+    addi $sp, $sp, 20
+    jr $ra
+    
+
+# -----------------------------------------------------------------------
+# check_rows_for_matching: Check rows
+# -----------------------------------------------------------------------
+check_cols_for_matching:
+    addi  $sp, $sp, -20
+    sw    $ra, 0($sp)
+    sw    $s0, 4($sp) # cur row
+    sw    $s1, 8($sp) # cur col
+    sw    $s2, 12($sp) # seq count
+    sw    $s3, 16($sp) # cur color
+    
+    li $s1, 0
+check_col_for_matching:
+    li $s2, 0
+    li $s0, 0 # pos in col
+check_col_square_for_match:
+    # Arguments:
+    #   $a0 - x coordinate (0-5)
+    #   $a1 - y coordinate (0-12)
+    # Return:
+    #   $v0 - type (0-6)
+    add   $a0, $zero, $s1
+    add   $a1, $zero, $s0
+    jal   read_board_value
+    
+    # Skip if colours are the same, otherwise reset
+    beq $v0, $s3, check_col_square_for_match_skip_color
+    li $s2, 0
+    add $s3, $zero, $v0
+    
+check_col_square_for_match_skip_color:
+    # cap incremeent at 3
+    li $t0, 3
+    beq $s2, $t0, check_col_square_for_match_skip_increment
+    addi $s2, $s2, 1
+    
+check_col_square_for_match_skip_increment:
+    # if not 3 stored skip backfill
+    li $t0, 3
+    bne $s2, $t0, check_col_square_for_match_skip_fill
+    # skip if colour is black
+    beq $s3, $zero, check_col_square_for_match_skip_fill
+    
+    # Fill the past 3 squares with 0
+    addi $a0, $s1, 0
+    addi $a1, $s0, 0
+    li $a2, 1
+    jal set_removal_board_value
+    addi $a0, $s1, 0
+    addi $a1, $s0, -1
+    li $a2, 1
+    jal set_removal_board_value
+    addi $a0, $s1, 0
+    addi $a1, $s0, -2
+    li $a2, 1
+    jal set_removal_board_value
+    
+check_col_square_for_match_skip_fill:
+    # incremenet x, != 6 go back
+    addi $s0, $s0, 1
+    li $t8, 13
+    bne $s0, $t8, check_col_square_for_match
+
+    # increment col
+    addi $s1, $s1, 1
+    li $t9, 6
+    bne $s1, $t9, check_col_for_matching
+    
+    j end_check_cols_for_matching
+    
+end_check_cols_for_matching:
+    lw $ra, 0($sp)
+    lw $s0, 4($sp)
+    lw $s1, 8($sp)
+    lw $s2, 12($sp)
+    lw $s3, 16($sp)
+    addi $sp, $sp, 20
+    jr $ra
+
+remove_marked_squares:
+    addi  $sp, $sp, -8
+    sw    $ra, 0($sp)
+    sw    $s0, 4($sp)           # i (loop counter)
+    li    $s0, 0                # i = 0 (cell index)
+
+remove_marked_loop:
+    # Loop 78 times (13 rows * 6 cols)
+    beq   $s0, 78, end_remove_marked_squares
+
+    # Load the value from game_board[i]
+    la    $t0, removal_game_board       # Load base address of the board
+    sll   $t1, $s0, 2           # offset = i * 4
+    add   $t1, $t0, $t1         # address = &game_board[i]
+    lw    $t0, 0($t1)           # $a2 = game_board[i] (the color value)
+    sw    $zero, 0($t1)
+
+    # Calculate 2D grid coordinates (row, col) from 1D index (i)
+    li    $t1, 6
+    divu  $s0, $t1
+    mflo  $a1                   # $s2 (row) = i / 6 (quotient)
+    mfhi  $a0                   # $s3 (col) = i % 6 (remainder)
+    li $a2, 0
+    
+    # if not marked, skip iter
+    beq $t0, $zero, continue_remove_marked_loop
+    jal set_board_value
+
+continue_remove_marked_loop:
+    addi  $s0, $s0, 1
+    j    remove_marked_loop
+
+end_remove_marked_squares:
+    lw $ra, 0($sp)
+    lw $s0, 4($sp)
+    addi $sp, $sp, 8
+    jr $ra
+
+remove_empty_gaps:
+    addi  $sp, $sp, -20
+    sw    $ra, 0($sp)
+    sw    $s0, 4($sp) # cur row
+    sw    $s1, 8($sp) # cur col
+    sw    $s2, 12($sp) # place row
+    sw    $s3, 16($sp) # cur color
+    
+    li $s1, 0
+pull_down_col_loop:
+    li $s0, 12
+    li $s2, 12
+pull_down_col:
+    # Arguments:
+    #   $a0 - x coordinate (0-5)
+    #   $a1 - y coordinate (0-12)
+    # Return:
+    #   $v0 - type (0-6)
+    # Read at bottom position
+    add   $a0, $zero, $s1
+    add   $a1, $zero, $s2
+    jal   read_board_value
+    
+    # Skip if not void
+    bne $v0, $zero, pull_down_col_inc_bottom
+    
+    # read top position
+    add   $a0, $zero, $s1
+    add   $a1, $zero, $s0
+    jal   read_board_value
+    
+    beq $v0, $zero, pull_down_col_skip_inc_bottom
+    
+    add   $a0, $zero, $s1
+    add   $a1, $zero, $s2
+    add   $a2, $zero, $v0
+    jal   set_board_value
+    
+    add   $a0, $zero, $s1
+    add   $a1, $zero, $s0
+    li $a2, 0
+    jal   set_board_value
+    
+pull_down_col_inc_bottom:    
+    addi $s2, $s2, -1
+    
+pull_down_col_skip_inc_bottom:
+    # incremenet x, != 6 go back
+    addi $s0, $s0, -1
+    li $t8, -1
+    lw $t7, cursor_row
+    beq $t7, $s0, pull_down_col_skip_col
+    bne $s0, $t8, pull_down_col
+pull_down_col_skip_col:
+    # increment col
+    addi $s1, $s1, 1
+    li $t9, 6
+    bne $s1, $t9, pull_down_col_loop
+
+
+end_remove_empty_gaps:
+    
+    sw $zero, piece_placed_flag
+
+    lw $ra, 0($sp)
+    lw $s0, 4($sp)
+    lw $s1, 8($sp)
+    lw $s2, 12($sp)
+    lw $s3, 16($sp)
+    addi $sp, $sp, 20
+    jr $ra
 # =======================================================================
 # Input Handling
 # =======================================================================
@@ -298,6 +761,7 @@ handle_input:
     # beq $t2, $t3, placeholder_func_for_o
 
     # Check for movement keys (WASD)
+    # BROKEN SINCE COLLIDING WITH ITSELF.
     lw $t3, KEY_UP
     beq $s0, $t3, move_up
 
@@ -309,6 +773,12 @@ handle_input:
 
     lw $t3, KEY_RIGHT
     beq $s0, $t3, move_right
+    
+    lw $t3, KEY_Z
+    beq $s0, $t3, press_z
+    
+    lw $t3, KEY_Q
+    beq $s0, $t3, game_end
 
     # If the pressed key doesn't match any of our handlers, do nothing.
     j input_done
@@ -351,18 +821,32 @@ move_down:
     # Load the current row and check if it's at the bottom (12).
     lw    $s0, cursor_row
     li    $t0, 12
-    beq   $s0, $t0, move_down_done  # If row is 12 (max), skip
+    beq   $s0, $t0, active_botton_collison  # If row is 12 (max), skip
     addi  $s0, $s0, 1               # Increment otherwise
     
     # Check collision
     lw    $a0, cursor_col
     add   $a1, $zero, $s0
     jal   read_board_value
-    bne   $v0, $zero, move_down_done
+    bne   $v0, $zero, active_botton_collison
     
     # Store value
     sw    $s0, cursor_row
-
+    j move_down_done
+    
+active_botton_collison:
+    jal generate_next_column
+    sw $zero, cursor_row
+    sw $zero, last_cursor_row
+    li $t0, 1
+    sw $t0, piece_placed_flag
+    
+    li $v0, 1
+    li $a0, 12
+    syscall
+    
+    j move_down_done
+    
 move_down_done:
     # --- RESTORE REGISTERS ---
     lw    $s0, 0($sp)
@@ -424,6 +908,10 @@ move_right_done:
     lw    $s0, 0($sp)
     addi  $sp, $sp, 4
     j     input_done
+
+press_z:
+    jal shift_current_column
+    j input_done
 
 # -----------------------------------------------------------------------
 # input_done: Common return point for all input handlers.
@@ -587,3 +1075,5 @@ draw_board_done:
     lw    $s0, 4($sp)
     addi  $sp, $sp, 8
     jr    $ra
+    
+game_end:

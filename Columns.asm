@@ -1,6 +1,6 @@
 # CSC258 Project: Columns
 # Student 1: Cayden Wong 1010871139
-# Student 2: 
+# Student 2: William Wu 1008956685
 
 
 # Structure / Style assumptions
@@ -49,6 +49,9 @@ KEY_DOWN:  .word 0x73 # 's'
 KEY_LEFT:  .word 0x61 # 'a'
 KEY_RIGHT: .word 0x64 # 'd'
 
+KEY_Z: .word 0x7A # 'z'
+KEY_Q: .word 0x71 # 'q'
+
 # -----------------------------------------------------------------------
 # Game Board Representation
 # -----------------------------------------------------------------------
@@ -64,6 +67,8 @@ KEY_RIGHT: .word 0x64 # 'd'
 # 6: YELLOW
 game_board: .space 312 # 13 rows * 6 columns * 4 bytes/cell
 
+curr_column_colours: .space 12 # 3 columns * 4 bytes/cell
+next_column_colours: .space 12 # 3 columns * 4 bytes/cell
 # -----------------------------------------------------------------------
 # Debugging Messages
 # -----------------------------------------------------------------------
@@ -82,11 +87,9 @@ main:
     jal draw_board
     # TODO:
     # - Populate first column slot
-    # -- TEMPORARY DEBUG --
-    li $a0 2
-    li $a1 2
-    li $a2 2
-    jal set_board_value
+    
+    jal generate_next_column
+    jal generate_next_column
 
 # =======================================================================
 # Main Game Loop
@@ -144,7 +147,7 @@ end_update_game_logic:
     addi    $sp, $sp, 4
     
     jr     $ra
-    
+
 # -----------------------------------------------------------------------
 # set_board_value: Sets the value at a specified location on the board
 # Arguments:
@@ -234,23 +237,61 @@ update_cursor:
     #       The bottom square of a piece should be the location of the cursor,
     #       Then, we only have to check collision at that one location
     #       This way, we only need to draw at and above the cursor for the cur piece
-    lw   $a0, cursor_col
-    lw   $a1, cursor_row
-    li   $a2, 1
-    jal set_board_value
     
-    # If the cursor position just changed, 
-    # then fill the prev location with void
+
+backfill_cursor: 
     lw   $a0, last_cursor_col
     lw   $a1, last_cursor_row
     li   $a2, 0
-    bne $s0, $a0, backfill_cursor
-    bne $s1, $a1, backfill_cursor
-    
-    j end_update_cursor
-    
-backfill_cursor:
     jal set_board_value
+    
+    lw   $a0, last_cursor_col
+    lw   $a1, last_cursor_row
+    li   $a2, 0
+    # check if a1 is 0: a1 cannot go to negative
+    beq  $a1, 0, draw_new_cursor 
+    addi $a1, $a1, -1
+    jal set_board_value
+    
+    lw   $a0, last_cursor_col
+    lw   $a1, last_cursor_row
+    li   $a2, 0
+    # check if a1 is 0: a1 cannot go to negative
+    beq  $a1, 1, draw_new_cursor 
+    addi $a1, $a1, -2
+    jal set_board_value
+    
+    
+draw_new_cursor:
+    la $t0, curr_column_colours
+    
+    lw   $a0, cursor_col
+    lw   $a1, cursor_row
+    lw   $a2, 0($t0)
+    jal set_board_value
+    
+    la $t0, curr_column_colours
+
+    lw   $a0, cursor_col
+    lw   $a1, cursor_row
+    lw   $a2, 4($t0)
+    # check if a1 is 0: a1 cannot go to negative
+    beq  $a1, 0, done_drawing_cursor 
+    addi $a1, $a1, -1
+    jal set_board_value
+    
+    la $t0, curr_column_colours
+    
+    lw   $a0, cursor_col
+    lw   $a1, cursor_row
+    lw   $a2, 8($t0)
+    # check if a1 is 0: a1 cannot go to negative
+    beq  $a1, 1, done_drawing_cursor 
+    addi $a1, $a1, -2
+    jal set_board_value
+    
+done_drawing_cursor:
+    # Save new position of last_cursor row and col
     sw $s0, last_cursor_col
     sw $s1, last_cursor_row
     
@@ -263,6 +304,72 @@ end_update_cursor:
     
     jr   $ra
 
+generate_next_column:
+    #TODO: Move random function to its own function
+    addi  $sp, $sp, -4
+    sw    $ra, 0($sp)
+    
+    la    $t0, curr_column_colours       # Load current column 
+    la    $t1, next_column_colours       # Load next column
+    
+    #shift next column into current column
+    lw   $t2, 0($t1)
+    sw   $t2, 0($t0)
+    
+    lw   $t2, 4($t1)
+    sw   $t2, 4($t0)
+    
+    lw   $t2, 8($t1)
+    sw   $t2, 8($t0)
+    
+    li $v0, 42
+    li $a0, 0
+    li $a1, 6
+    syscall
+    #return val in a0
+    addi $a0, $a0, 1
+    
+    sw $a0, 0($t1)
+    
+    li $v0, 42
+    li $a0, 0
+    li $a1, 6
+    syscall
+    #return val in a0
+    addi $a0, $a0, 1
+    
+    sw $a0, 4($t1)
+    
+    li $v0, 42
+    li $a0, 0
+    li $a1, 6
+    syscall
+    #return val in a0
+    addi $a0, $a0, 1
+    
+    sw $a0, 8($t1)
+
+    lw $ra 0($sp)
+    addi $sp, $sp, 4
+    
+    jr $ra
+    
+shift_current_column:
+    addi  $sp, $sp, -4
+    sw    $ra, 0($sp)
+    
+    la $t0, curr_column_colours
+    lw $t1, 0($t0)
+    lw $t2, 4($t0)
+    lw $t3, 8($t0)
+    
+    sw $t1, 8($t0)
+    sw $t2, 0($t0)
+    sw $t3, 4($t0)
+    
+    lw $ra 0($sp)
+    addi $sp, $sp, 4
+    jr $ra
 # =======================================================================
 # Input Handling
 # =======================================================================
@@ -309,6 +416,12 @@ handle_input:
 
     lw $t3, KEY_RIGHT
     beq $s0, $t3, move_right
+    
+    lw $t3, KEY_Z
+    beq $s0, $t3, press_z
+    
+    lw $t3, KEY_Q
+    beq $s0, $t3, game_end
 
     # If the pressed key doesn't match any of our handlers, do nothing.
     j input_done
@@ -351,18 +464,25 @@ move_down:
     # Load the current row and check if it's at the bottom (12).
     lw    $s0, cursor_row
     li    $t0, 12
-    beq   $s0, $t0, move_down_done  # If row is 12 (max), skip
+    beq   $s0, $t0, active_botton_collison  # If row is 12 (max), skip
     addi  $s0, $s0, 1               # Increment otherwise
     
     # Check collision
     lw    $a0, cursor_col
     add   $a1, $zero, $s0
     jal   read_board_value
-    bne   $v0, $zero, move_down_done
+    bne   $v0, $zero, active_botton_collison
     
     # Store value
     sw    $s0, cursor_row
-
+    j move_down_done
+    
+active_botton_collison:
+    jal generate_next_column
+    sw $zero, cursor_row
+    sw $zero, last_cursor_row
+    j move_down_done
+    
 move_down_done:
     # --- RESTORE REGISTERS ---
     lw    $s0, 0($sp)
@@ -424,6 +544,10 @@ move_right_done:
     lw    $s0, 0($sp)
     addi  $sp, $sp, 4
     j     input_done
+
+press_z:
+    jal shift_current_column
+    j input_done
 
 # -----------------------------------------------------------------------
 # input_done: Common return point for all input handlers.
@@ -587,3 +711,5 @@ draw_board_done:
     lw    $s0, 4($sp)
     addi  $sp, $sp, 8
     jr    $ra
+    
+game_end:

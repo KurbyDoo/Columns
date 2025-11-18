@@ -237,6 +237,7 @@ update_cursor:
     #       The bottom square of a piece should be the location of the cursor,
     #       Then, we only have to check collision at that one location
     #       This way, we only need to draw at and above the cursor for the cur piece
+    #
     
 
 backfill_cursor: 

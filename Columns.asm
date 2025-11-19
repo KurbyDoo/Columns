@@ -45,6 +45,7 @@ last_cursor_col:    .word 0
 last_cursor_row:    .word 0
 
 piece_placed_flag:  .word 0 
+found_match_flag:   .word 0
 
 # -----------------------------------------------------------------------
 # Keyboard ASCII Values
@@ -99,14 +100,49 @@ main:
     # TODO:
     # - Populate first column slot
         
-    li $a0, 5
+    # li $a0, 5
+    # li $a1, 12
+    # li $a2, 1
+    # jal set_board_value
+    
+    # li $a0, 5
+    # li $a1, 11
+    # li $a2, 2
+    # jal set_board_value
+    
+    # li $a0, 4
+    # li $a1, 12
+    # li $a2, 1
+    # jal set_board_value
+    
+    # li $a0, 4
+    # li $a1, 11
+    # li $a2, 2
+    # jal set_board_value
+    
+    # li $a0, 5
+    # li $a1, 10
+    # li $a2, 1
+    # jal set_board_value
+    
+    # li $a0, 5
+    # li $a1, 9
+    # li $a2, 1
+    # jal set_board_value
+    
+    li $a0, 0
     li $a1, 12
     li $a2, 1
     jal set_board_value
     
-    li $a0, 5
+    li $a0, 1
     li $a1, 11
     li $a2, 1
+    jal set_board_value
+
+    li $a0, 1
+    li $a1, 12
+    li $a2, 6
     jal set_board_value
     
     sw $zero, piece_placed_flag
@@ -448,6 +484,7 @@ check_for_matching:
     # We check all columns and all rows
     jal check_rows_for_matching
     jal check_cols_for_matching
+    jal check_diag_ups_for_matching
     
     j end_check_for_matching
 
@@ -617,6 +654,92 @@ end_check_cols_for_matching:
     addi $sp, $sp, 20
     jr $ra
 
+# -----------------------------------------------------------------------
+# check_r\ows_for_matching: Check rows
+# -----------------------------------------------------------------------
+check_diag_ups_for_matching:
+    addi  $sp, $sp, -24
+    sw    $ra, 0($sp)
+    sw    $s0, 4($sp) # cur row
+    sw    $s1, 8($sp) # cur pos
+    sw    $s2, 12($sp) # seq count
+    sw    $s3, 16($sp) # cur color
+    sw    $s4, 20($sp) # start row
+    
+    li $s4, 0
+check_diag_up_for_matching:
+    li $s2, 0
+    li $s1, 0 # pos in row
+    add $s0, $zero, $s4
+check_diag_up_square_for_match:
+    # Arguments:
+    #   $a0 - x coordinate (0-5)
+    #   $a1 - y coordinate (0-12)
+    # Return:
+    #   $v0 - type (0-6)
+    add   $a0, $zero, $s1
+    add   $a1, $zero, $s0
+    jal   read_board_value
+    
+    # Skip if colours are the same, otherwise reset
+    beq $v0, $s3, check_diag_up_square_for_match_skip_color
+    li $s2, 0
+    add $s3, $zero, $v0
+    
+check_diag_up_square_for_match_skip_color:
+    # cap incremeent at 3
+    li $t0, 3
+    beq $s2, $t0, check_diag_up_square_for_match_skip_increment
+    addi $s2, $s2, 1
+    
+check_diag_up_square_for_match_skip_increment:
+    # if not 3 stored skip backfill
+    li $t0, 3
+    bne $s2, $t0, check_diag_up_square_for_match_skip_fill
+    # skip if colour is black
+    beq $s3, $zero, check_diag_up_square_for_match_skip_fill
+    
+    # Fill the past 3 squares with 0
+    addi $a0, $s1, 0
+    addi $a1, $s0, 0
+    li $a2, 1
+    jal set_removal_board_value
+    addi $a0, $s1, -1
+    addi $a1, $s0, 1
+    li $a2, 1
+    jal set_removal_board_value
+    addi $a0, $s1, -2
+    addi $a1, $s0, 2
+    li $a2, 1
+    jal set_removal_board_value
+    
+check_diag_up_square_for_match_skip_fill:
+    # incremenet x, != 6 go back
+    addi $s1, $s1, 1
+    addi $s0, $s0, -1
+    li $t8, -1
+    beq $s0, $t8, check_diag_up_skip_to_next
+    li $t8, 6
+    bne $s1, $t8, check_diag_up_square_for_match
+check_diag_up_skip_to_next:
+    # increment row
+    addi $s4, $s4, 1
+    li $t9, 13
+    bne $s4, $t9, check_diag_up_for_matching
+    
+    j end_check_diag_up_for_matching
+    
+end_check_diag_up_for_matching:
+    lw $ra, 0($sp)
+    lw $s0, 4($sp)
+    lw $s1, 8($sp)
+    lw $s2, 12($sp)
+    lw $s3, 16($sp)
+    lw $s4, 20($sp)
+    addi $sp, $sp, 24
+    jr $ra
+
+
 remove_marked_squares:
     addi  $sp, $sp, -8
     sw    $ra, 0($sp)
@@ -632,6 +755,11 @@ remove_marked_loop:
     sll   $t1, $s0, 2           # offset = i * 4
     add   $t1, $t0, $t1         # address = &game_board[i]
     lw    $t0, 0($t1)           # $a2 = game_board[i] (the color value)
+    
+    beq $t0, $zero, skip_set_removed_marked_flag
+    li $t0, 1
+    sw $t0, found_match_flag
+skip_set_removed_marked_flag:
     sw    $zero, 0($t1)
 
     # Calculate 2D grid coordinates (row, col) from 1D index (i)
@@ -716,9 +844,10 @@ pull_down_col_skip_col:
 
 
 end_remove_empty_gaps:
-    
+    lw $t0, found_match_flag
+    bne $zero, $t0, skip_reset_piece_placed_flag
     sw $zero, piece_placed_flag
-
+skip_reset_piece_placed_flag:
     lw $ra, 0($sp)
     lw $s0, 4($sp)
     lw $s1, 8($sp)
@@ -838,8 +967,16 @@ active_botton_collison:
     jal generate_next_column
     sw $zero, cursor_row
     sw $zero, last_cursor_row
+    li $t0, 3
+    sw $t0, cursor_col
+    sw $t0, last_cursor_col
     li $t0, 1
     sw $t0, piece_placed_flag
+    
+    lw $a0, cursor_col
+    lw $a1, cursor_row
+    jal read_board_value
+    bne $v0, $zero, game_end
     
     li $v0, 1
     li $a0, 12

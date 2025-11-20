@@ -130,21 +130,16 @@ main:
     # li $a2, 1
     # jal set_board_value
     
-    li $a0, 0
+    li $a0, 4
     li $a1, 12
     li $a2, 1
     jal set_board_value
     
-    li $a0, 1
-    li $a1, 11
+    li $a0, 5
+    li $a1, 12
     li $a2, 1
     jal set_board_value
 
-    li $a0, 1
-    li $a1, 12
-    li $a2, 6
-    jal set_board_value
-    
     sw $zero, piece_placed_flag
     
     jal generate_next_column
@@ -199,8 +194,11 @@ update_game_logic:
     jal remove_empty_gaps
     
 game_logic_skip_clear:
-    # For now, it just draws the cursor for demonstration.
+    # If we are still placing piece, skip cursor drawing
+    lw $t0, piece_placed_flag
+    bne $t0, $zero, end_update_game_logic
     jal update_cursor
+
     
 end_update_game_logic:
     # --- RESTORE REGISTERS ---
@@ -319,8 +317,7 @@ end_read_board_value:
     
 # -----------------------------------------------------------------------
 # update_cursor: Places a block of the current color at the cursor's
-#              position on the game board. This is a placeholder for
-#              spawning new pieces.
+#              position on the game board. 
 # -----------------------------------------------------------------------
 update_cursor:
     # --- SAVE REGISTERS ---
@@ -329,13 +326,6 @@ update_cursor:
     
     lw   $s0, cursor_col
     lw   $s1, cursor_row
-    # -- TEMPORARY CURSOR LOGIC --
-    # Place a blue block (value 1) at the cursor position.
-    # TODO: This should be replaced with the color of the falling piece.
-    #       The bottom square of a piece should be the location of the cursor,
-    #       Then, we only have to check collision at that one location
-    #       This way, we only need to draw at and above the cursor for the cur piece
-    
 
 backfill_cursor: 
     lw   $a0, last_cursor_col
@@ -484,7 +474,10 @@ check_for_matching:
     # We check all columns and all rows
     jal check_rows_for_matching
     jal check_cols_for_matching
-    jal check_diag_ups_for_matching
+    jal check_diag_left_ups_for_matching
+    jal check_diag_left_downs_for_matching
+    jal check_diag_right_bots_for_matching
+    jal check_diag_right_tops_for_matching
     
     j end_check_for_matching
 
@@ -655,9 +648,9 @@ end_check_cols_for_matching:
     jr $ra
 
 # -----------------------------------------------------------------------
-# check_r\ows_for_matching: Check rows
+# check_diag_left_ups_for_matching: Check diag in / on left wall
 # -----------------------------------------------------------------------
-check_diag_ups_for_matching:
+check_diag_left_ups_for_matching:
     addi  $sp, $sp, -24
     sw    $ra, 0($sp)
     sw    $s0, 4($sp) # cur row
@@ -667,11 +660,11 @@ check_diag_ups_for_matching:
     sw    $s4, 20($sp) # start row
     
     li $s4, 0
-check_diag_up_for_matching:
+check_diag_left_up_for_matching:
     li $s2, 0
     li $s1, 0 # pos in row
     add $s0, $zero, $s4
-check_diag_up_square_for_match:
+check_diag_left_up_square_for_match:
     # Arguments:
     #   $a0 - x coordinate (0-5)
     #   $a1 - y coordinate (0-12)
@@ -682,22 +675,22 @@ check_diag_up_square_for_match:
     jal   read_board_value
     
     # Skip if colours are the same, otherwise reset
-    beq $v0, $s3, check_diag_up_square_for_match_skip_color
+    beq $v0, $s3, check_diag_left_up_square_for_match_skip_color
     li $s2, 0
     add $s3, $zero, $v0
     
-check_diag_up_square_for_match_skip_color:
+check_diag_left_up_square_for_match_skip_color:
     # cap incremeent at 3
     li $t0, 3
-    beq $s2, $t0, check_diag_up_square_for_match_skip_increment
+    beq $s2, $t0, check_diag_left_up_square_for_match_skip_increment
     addi $s2, $s2, 1
     
-check_diag_up_square_for_match_skip_increment:
+check_diag_left_up_square_for_match_skip_increment:
     # if not 3 stored skip backfill
     li $t0, 3
-    bne $s2, $t0, check_diag_up_square_for_match_skip_fill
+    bne $s2, $t0, check_diag_left_up_square_for_match_skip_fill
     # skip if colour is black
-    beq $s3, $zero, check_diag_up_square_for_match_skip_fill
+    beq $s3, $zero, check_diag_left_up_square_for_match_skip_fill
     
     # Fill the past 3 squares with 0
     addi $a0, $s1, 0
@@ -713,23 +706,278 @@ check_diag_up_square_for_match_skip_increment:
     li $a2, 1
     jal set_removal_board_value
     
-check_diag_up_square_for_match_skip_fill:
+check_diag_left_up_square_for_match_skip_fill:
     # incremenet x, != 6 go back
     addi $s1, $s1, 1
     addi $s0, $s0, -1
     li $t8, -1
-    beq $s0, $t8, check_diag_up_skip_to_next
+    beq $s0, $t8, check_diag_left_up_skip_to_next
     li $t8, 6
-    bne $s1, $t8, check_diag_up_square_for_match
-check_diag_up_skip_to_next:
+    bne $s1, $t8, check_diag_left_up_square_for_match
+check_diag_left_up_skip_to_next:
     # increment row
     addi $s4, $s4, 1
     li $t9, 13
-    bne $s4, $t9, check_diag_up_for_matching
+    bne $s4, $t9, check_diag_left_up_for_matching
     
-    j end_check_diag_up_for_matching
+    j end_check_diag_left_up_for_matching
     
-end_check_diag_up_for_matching:
+end_check_diag_left_up_for_matching:
+    lw $ra, 0($sp)
+    lw $s0, 4($sp)
+    lw $s1, 8($sp)
+    lw $s2, 12($sp)
+    lw $s3, 16($sp)
+    lw $s4, 20($sp)
+    addi $sp, $sp, 24
+    jr $ra
+    
+# -----------------------------------------------------------------------
+# check_diag_left_ups_for_matching: Check diag in / on floor
+# -----------------------------------------------------------------------
+check_diag_right_bots_for_matching:
+    addi  $sp, $sp, -24
+    sw    $ra, 0($sp)
+    sw    $s0, 4($sp) # cur row
+    sw    $s1, 8($sp) # cur pos
+    sw    $s2, 12($sp) # seq count
+    sw    $s3, 16($sp) # cur color
+    sw    $s4, 20($sp) # start row
+    
+    li $s4, 0
+check_diag_right_bot_for_matching:
+    li $s2, 0
+    add $s1, $zero, $s4 # pos in row
+    li $s0, 12
+check_diag_right_bot_square_for_match:
+    # Arguments:
+    #   $a0 - x coordinate (0-5)
+    #   $a1 - y coordinate (0-12)
+    # Return:
+    #   $v0 - type (0-6)
+    add   $a0, $zero, $s1
+    add   $a1, $zero, $s0
+    jal   read_board_value
+    
+    # Skip if colours are the same, otherwise reset
+    beq $v0, $s3, check_diag_right_bot_square_for_match_skip_color
+    li $s2, 0
+    add $s3, $zero, $v0
+    
+check_diag_right_bot_square_for_match_skip_color:
+    # cap incremeent at 3
+    li $t0, 3
+    beq $s2, $t0, check_diag_right_bot_square_for_match_skip_increment
+    addi $s2, $s2, 1
+    
+check_diag_right_bot_square_for_match_skip_increment:
+    # if not 3 stored skip backfill
+    li $t0, 3
+    bne $s2, $t0, check_diag_right_bot_square_for_match_skip_fill
+    # skip if colour is black
+    beq $s3, $zero, check_diag_right_bot_square_for_match_skip_fill
+    
+    # Fill the past 3 squares with 0
+    addi $a0, $s1, 0
+    addi $a1, $s0, 0
+    li $a2, 1
+    jal set_removal_board_value
+    addi $a0, $s1, -1
+    addi $a1, $s0, 1
+    li $a2, 1
+    jal set_removal_board_value
+    addi $a0, $s1, -2
+    addi $a1, $s0, 2
+    li $a2, 1
+    jal set_removal_board_value
+    
+check_diag_right_bot_square_for_match_skip_fill:
+    # incremenet x, != 6 go back
+    addi $s1, $s1, 1
+    addi $s0, $s0, -1
+    li $t8, -1
+    beq $s0, $t8, check_diag_right_bot_skip_to_next
+    li $t8, 6
+    bne $s1, $t8, check_diag_right_bot_square_for_match
+check_diag_right_bot_skip_to_next:
+    # increment row
+    addi $s4, $s4, 1
+    li $t9, 13
+    bne $s4, $t9, check_diag_right_bot_for_matching
+    
+    j end_check_diag_right_bot_for_matching
+    
+end_check_diag_right_bot_for_matching:
+    lw $ra, 0($sp)
+    lw $s0, 4($sp)
+    lw $s1, 8($sp)
+    lw $s2, 12($sp)
+    lw $s3, 16($sp)
+    lw $s4, 20($sp)
+    addi $sp, $sp, 24
+    jr $ra
+    
+# -----------------------------------------------------------------------
+# check_diag_left_ups_for_matching: Check diag in \ on left wall
+# -----------------------------------------------------------------------
+check_diag_left_downs_for_matching:
+    addi  $sp, $sp, -24
+    sw    $ra, 0($sp)
+    sw    $s0, 4($sp) # cur row
+    sw    $s1, 8($sp) # cur pos
+    sw    $s2, 12($sp) # seq count
+    sw    $s3, 16($sp) # cur color
+    sw    $s4, 20($sp) # start row
+    
+    li $s4, 0
+check_diag_left_down_for_matching:
+    li $s2, 0
+    li $s1, 0 # pos in row
+    add $s0, $zero, $s4
+check_diag_left_down_square_for_match:
+    # Arguments:
+    #   $a0 - x coordinate (0-5)
+    #   $a1 - y coordinate (0-12)
+    # Return:
+    #   $v0 - type (0-6)
+    add   $a0, $zero, $s1
+    add   $a1, $zero, $s0
+    jal   read_board_value
+    
+    # Skip if colours are the same, otherwise reset
+    beq $v0, $s3, check_diag_left_down_square_for_match_skip_color
+    li $s2, 0
+    add $s3, $zero, $v0
+    
+check_diag_left_down_square_for_match_skip_color:
+    # cap incremeent at 3
+    li $t0, 3
+    beq $s2, $t0, check_diag_left_down_square_for_match_skip_increment
+    addi $s2, $s2, 1
+    
+check_diag_left_down_square_for_match_skip_increment:
+    # if not 3 stored skip backfill
+    li $t0, 3
+    bne $s2, $t0, check_diag_left_down_square_for_match_skip_fill
+    # skip if colour is black
+    beq $s3, $zero, check_diag_left_down_square_for_match_skip_fill
+    
+    # Fill the past 3 squares with 0
+    addi $a0, $s1, 0
+    addi $a1, $s0, 0
+    li $a2, 1
+    jal set_removal_board_value
+    addi $a0, $s1, -1
+    addi $a1, $s0, -1
+    li $a2, 1
+    jal set_removal_board_value
+    addi $a0, $s1, -2
+    addi $a1, $s0, -2
+    li $a2, 1
+    jal set_removal_board_value
+    
+check_diag_left_down_square_for_match_skip_fill:
+    # y++ != 13 and x++ != 6 go back 
+    addi $s1, $s1, 1 # change x
+    addi $s0, $s0, 1 # change y
+    li $t8, 13
+    beq $s0, $t8, check_diag_left_down_skip_to_next
+    li $t8, 6
+    bne $s1, $t8, check_diag_left_down_square_for_match
+check_diag_left_down_skip_to_next:
+    # increment row
+    addi $s4, $s4, 1
+    li $t9, 13
+    bne $s4, $t9, check_diag_left_down_for_matching
+    
+    j end_check_diag_left_down_for_matching
+    
+end_check_diag_left_down_for_matching:
+    lw $ra, 0($sp)
+    lw $s0, 4($sp)
+    lw $s1, 8($sp)
+    lw $s2, 12($sp)
+    lw $s3, 16($sp)
+    lw $s4, 20($sp)
+    addi $sp, $sp, 24
+    jr $ra
+    
+# -----------------------------------------------------------------------
+# check_diag_left_ups_for_matching: Check diag in \ on ceil
+# -----------------------------------------------------------------------
+check_diag_right_tops_for_matching:
+    addi  $sp, $sp, -24
+    sw    $ra, 0($sp)
+    sw    $s0, 4($sp) # cur row
+    sw    $s1, 8($sp) # cur pos
+    sw    $s2, 12($sp) # seq count
+    sw    $s3, 16($sp) # cur color
+    sw    $s4, 20($sp) # start row
+    
+    li $s4, 0 # x pos
+check_diag_right_top_for_matching:
+    li $s2, 0
+    add $s1, $zero, $s4 # cur x
+    li $s0, 0 # cur y
+check_diag_right_top_square_for_match:
+    # Arguments:
+    #   $a0 - x coordinate (0-5)
+    #   $a1 - y coordinate (0-12)
+    # Return:
+    #   $v0 - type (0-6)
+    add   $a0, $zero, $s1
+    add   $a1, $zero, $s0
+    jal   read_board_value
+    
+    # Skip if colours are the same, otherwise reset
+    beq $v0, $s3, check_diag_right_top_square_for_match_skip_color
+    li $s2, 0
+    add $s3, $zero, $v0
+    
+check_diag_right_top_square_for_match_skip_color:
+    # cap incremeent at 3
+    li $t0, 3
+    beq $s2, $t0, check_diag_right_top_square_for_match_skip_increment
+    addi $s2, $s2, 1
+    
+check_diag_right_top_square_for_match_skip_increment:
+    # if not 3 stored skip backfill
+    li $t0, 3
+    bne $s2, $t0, check_diag_right_top_square_for_match_skip_fill
+    # skip if colour is black
+    beq $s3, $zero, check_diag_right_top_square_for_match_skip_fill
+    
+    # Fill the past 3 squares with 0
+    addi $a0, $s1, 0
+    addi $a1, $s0, 0
+    li $a2, 1
+    jal set_removal_board_value
+    addi $a0, $s1, -1
+    addi $a1, $s0, -1
+    li $a2, 1
+    jal set_removal_board_value
+    addi $a0, $s1, -2
+    addi $a1, $s0, -2
+    li $a2, 1
+    jal set_removal_board_value
+    
+check_diag_right_top_square_for_match_skip_fill:
+    # y++ != 13 and x++ != 6 go back 
+    addi $s1, $s1, 1 # change x
+    addi $s0, $s0, 1 # change y
+    li $t8, 13
+    beq $s0, $t8, check_diag_right_top_skip_to_next
+    li $t8, 6
+    bne $s1, $t8, check_diag_right_top_square_for_match
+check_diag_right_top_skip_to_next:
+    # increment col
+    addi $s4, $s4, 1
+    li $t9, 13
+    bne $s4, $t9, check_diag_right_top_for_matching
+    
+    j end_check_diag_right_top_for_matching
+    
+end_check_diag_right_top_for_matching:
     lw $ra, 0($sp)
     lw $s0, 4($sp)
     lw $s1, 8($sp)
@@ -740,11 +988,14 @@ end_check_diag_up_for_matching:
     jr $ra
 
 
+
+
 remove_marked_squares:
     addi  $sp, $sp, -8
     sw    $ra, 0($sp)
     sw    $s0, 4($sp)           # i (loop counter)
     li    $s0, 0                # i = 0 (cell index)
+    sw $zero, found_match_flag
 
 remove_marked_loop:
     # Loop 78 times (13 rows * 6 cols)
@@ -790,6 +1041,9 @@ remove_empty_gaps:
     sw    $s1, 8($sp) # cur col
     sw    $s2, 12($sp) # place row
     sw    $s3, 16($sp) # cur color
+    
+    lw $t0, piece_placed_flag
+    beq $zero, $t0, skip_reset_piece_placed_flag
     
     li $s1, 0
 pull_down_col_loop:
@@ -847,6 +1101,17 @@ end_remove_empty_gaps:
     lw $t0, found_match_flag
     bne $zero, $t0, skip_reset_piece_placed_flag
     sw $zero, piece_placed_flag
+    
+    # set cursor to (3, 0)
+    sw $zero, cursor_row
+    sw $zero, last_cursor_row
+    
+    # if the center square is filled after flag check, end game
+    li $a0, 3
+    li $a1, 0
+    jal read_board_value
+    bne $v0, $zero, end_game
+    
 skip_reset_piece_placed_flag:
     lw $ra, 0($sp)
     lw $s0, 4($sp)
@@ -907,7 +1172,7 @@ handle_input:
     beq $s0, $t3, press_z
     
     lw $t3, KEY_Q
-    beq $s0, $t3, game_end
+    beq $s0, $t3, end_game
 
     # If the pressed key doesn't match any of our handlers, do nothing.
     j input_done
@@ -965,18 +1230,18 @@ move_down:
     
 active_botton_collison:
     jal generate_next_column
-    sw $zero, cursor_row
-    sw $zero, last_cursor_row
+    
+    # set cursor to (3, -1)
+    # we do not draw the cursor if the flag is on
+    li $t0, -1
+    sw $t0, cursor_row
+    sw $t0, last_cursor_row
     li $t0, 3
     sw $t0, cursor_col
     sw $t0, last_cursor_col
+    
     li $t0, 1
     sw $t0, piece_placed_flag
-    
-    lw $a0, cursor_col
-    lw $a1, cursor_row
-    jal read_board_value
-    bne $v0, $zero, game_end
     
     li $v0, 1
     li $a0, 12
@@ -1213,4 +1478,4 @@ draw_board_done:
     addi  $sp, $sp, 8
     jr    $ra
     
-game_end:
+end_game:

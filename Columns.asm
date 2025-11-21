@@ -25,15 +25,89 @@ DISPLAY_ADDRESS:    .word 0x10008000 # Address specified in the bitmap tab
 KEYBOARD_FLAG:      .word 0xffff0000 # Address that signals a key has been pressed
 KEYBOARD_DATA:      .word 0xffff0004 # Address that holds the pressed key's value
 
-# Colors (32-bit color: 0x00RRGGBB)
-COLOUR_BLACK:       .word 0x00000000
-COLOUR_WHITE:       .word 0x00FFFFFF
-COLOUR_BLUE:        .word 0x000080FF
-COLOUR_GREEN:       .word 0x0000C000
-COLOUR_RED:         .word 0x00FF0000
-COLOUR_ORANGE:      .word 0x00FF8000
-COLOUR_PURPLE:      .word 0x00C000C0
-COLOUR_YELLOW:      .word 0x00FFFF00
+# ==============================================================================
+# COLOR PALETTE (32-bit color: 0x00RRGGBB)
+# ==============================================================================
+
+# --- Original Colors (Do Not Modify) ---
+COLOUR_PALETTE:
+    COLOUR_BLACK:       .word 0x00000000
+    COLOUR_BLUE:        .word 0x000080FF
+    COLOUR_GREEN:       .word 0x0000C000
+    COLOUR_RED:         .word 0x00FF0000
+    COLOUR_ORANGE:      .word 0x00FF8000
+    COLOUR_PURPLE:      .word 0x00C000C0
+    COLOUR_YELLOW:      .word 0x00FFFF00
+    COLOUR_WHITE:       .word 0x00FFFFFF
+    
+    # --- Greyscale & Off-Whites ---
+    COLOUR_GREY_10:     .word 0x001A1A1A  # Very Dark
+    COLOUR_GREY_25:     .word 0x00404040
+    COLOUR_GREY_50:     .word 0x00808080  # Mid Grey
+    COLOUR_GREY_75:     .word 0x00C0C0C0  # Silver
+    COLOUR_SNOW:        .word 0x00FFFAFA
+    COLOUR_IVORY:       .word 0x00FFFFF0
+    COLOUR_BEIGE:       .word 0x00F5F5DC
+    
+    # --- Reds & Pinks ---
+    COLOUR_MAROON:      .word 0x00800000
+    COLOUR_DARK_RED:    .word 0x008B0000
+    COLOUR_CRIMSON:     .word 0x00DC143C
+    COLOUR_TOMATO:      .word 0x00FF6347
+    COLOUR_SALMON:      .word 0x00FA8072
+    COLOUR_HOT_PINK:    .word 0x00FF69B4
+    COLOUR_DEEP_PINK:   .word 0x00FF1493
+    COLOUR_LIGHT_PINK:  .word 0x00FFB6C1
+    
+    # --- Oranges & Browns ---
+    COLOUR_CORAL:       .word 0x00FF7F50
+    COLOUR_DARK_ORANGE: .word 0x00FF8C00
+    COLOUR_GOLD:        .word 0x00FFD700
+    COLOUR_CHOCOLATE:   .word 0x00D2691E
+    COLOUR_SADDLE_BROWN:.word 0x008B4513
+    COLOUR_SIENNA:      .word 0x00A0522D
+    COLOUR_SANDY_BROWN: .word 0x00F4A460
+    COLOUR_TAN:         .word 0x00D2B48C
+    
+    # --- Yellows ---
+    COLOUR_KHAKI:       .word 0x00F0E68C
+    COLOUR_PALE_GOLD:   .word 0x00EEE8AA
+    COLOUR_MOCCASIN:    .word 0x00FFE4B5
+    
+    # --- Greens ---
+    COLOUR_LIME:        .word 0x0000FF00  # Pure Green
+    COLOUR_LIME_GREEN:  .word 0x0032CD32
+    COLOUR_PALE_GREEN:  .word 0x0098FB98
+    COLOUR_SEA_GREEN:   .word 0x002E8B57
+    COLOUR_FOREST_GREEN:.word 0x00228B22
+    COLOUR_DARK_GREEN:  .word 0x00006400
+    COLOUR_OLIVE:       .word 0x00808000
+    COLOUR_OLIVE_DRAB:  .word 0x006B8E23
+    
+    # --- Cyans & Teals ---
+    COLOUR_CYAN:        .word 0x0000FFFF
+    COLOUR_AQUAMARINE:  .word 0x007FFFD4
+    COLOUR_TURQUOISE:   .word 0x0040E0D0
+    COLOUR_TEAL:        .word 0x00008080
+    COLOUR_LIGHT_CYAN:  .word 0x00E0FFFF
+    
+    # --- Blues ---
+    COLOUR_POWDER_BLUE: .word 0x00B0E0E6
+    COLOUR_SKY_BLUE:    .word 0x0087CEEB
+    COLOUR_STEEL_BLUE:  .word 0x004682B4
+    COLOUR_ROYAL_BLUE:  .word 0x004169E1
+    COLOUR_PURE_BLUE:   .word 0x000000FF
+    COLOUR_NAVY:        .word 0x00000080
+    COLOUR_MIDNIGHT:    .word 0x00191970
+    
+    # --- Purples & Violets ---
+    COLOUR_LAVENDER:    .word 0x00E6E6FA
+    COLOUR_PLUM:        .word 0x00DDA0DD
+    COLOUR_VIOLET:      .word 0x00EE82EE
+    COLOUR_MAGENTA:     .word 0x00FF00FF
+    COLOUR_DARK_ORCHID: .word 0x009932CC
+    COLOUR_INDIGO:      .word 0x004B0082
+    COLOUR_SLATE_BLUE:  .word 0x006A5ACD
 
 # -----------------------------------------------------------------------
 # Game State
@@ -96,6 +170,7 @@ newline: .asciiz "\n"
 main:
     # Initialization: These functions run once at the start.
     jal clear_screen
+    jal draw_background
     jal draw_board
     # TODO:
     # - Populate first column slot
@@ -130,21 +205,16 @@ main:
     # li $a2, 1
     # jal set_board_value
     
-    li $a0, 0
+    li $a0, 4
     li $a1, 12
     li $a2, 1
     jal set_board_value
     
-    li $a0, 1
-    li $a1, 11
+    li $a0, 5
+    li $a1, 12
     li $a2, 1
     jal set_board_value
 
-    li $a0, 1
-    li $a1, 12
-    li $a2, 6
-    jal set_board_value
-    
     sw $zero, piece_placed_flag
     
     jal generate_next_column
@@ -199,8 +269,11 @@ update_game_logic:
     jal remove_empty_gaps
     
 game_logic_skip_clear:
-    # For now, it just draws the cursor for demonstration.
+    # If we are still placing piece, skip cursor drawing
+    lw $t0, piece_placed_flag
+    bne $t0, $zero, end_update_game_logic
     jal update_cursor
+
     
 end_update_game_logic:
     # --- RESTORE REGISTERS ---
@@ -319,8 +392,7 @@ end_read_board_value:
     
 # -----------------------------------------------------------------------
 # update_cursor: Places a block of the current color at the cursor's
-#              position on the game board. This is a placeholder for
-#              spawning new pieces.
+#              position on the game board. 
 # -----------------------------------------------------------------------
 update_cursor:
     # --- SAVE REGISTERS ---
@@ -329,13 +401,6 @@ update_cursor:
     
     lw   $s0, cursor_col
     lw   $s1, cursor_row
-    # -- TEMPORARY CURSOR LOGIC --
-    # Place a blue block (value 1) at the cursor position.
-    # TODO: This should be replaced with the color of the falling piece.
-    #       The bottom square of a piece should be the location of the cursor,
-    #       Then, we only have to check collision at that one location
-    #       This way, we only need to draw at and above the cursor for the cur piece
-    
 
 backfill_cursor: 
     lw   $a0, last_cursor_col
@@ -484,7 +549,10 @@ check_for_matching:
     # We check all columns and all rows
     jal check_rows_for_matching
     jal check_cols_for_matching
-    jal check_diag_ups_for_matching
+    jal check_diag_left_ups_for_matching
+    jal check_diag_left_downs_for_matching
+    jal check_diag_right_bots_for_matching
+    jal check_diag_right_tops_for_matching
     
     j end_check_for_matching
 
@@ -655,9 +723,9 @@ end_check_cols_for_matching:
     jr $ra
 
 # -----------------------------------------------------------------------
-# check_r\ows_for_matching: Check rows
+# check_diag_left_ups_for_matching: Check diag in / on left wall
 # -----------------------------------------------------------------------
-check_diag_ups_for_matching:
+check_diag_left_ups_for_matching:
     addi  $sp, $sp, -24
     sw    $ra, 0($sp)
     sw    $s0, 4($sp) # cur row
@@ -667,11 +735,11 @@ check_diag_ups_for_matching:
     sw    $s4, 20($sp) # start row
     
     li $s4, 0
-check_diag_up_for_matching:
+check_diag_left_up_for_matching:
     li $s2, 0
     li $s1, 0 # pos in row
     add $s0, $zero, $s4
-check_diag_up_square_for_match:
+check_diag_left_up_square_for_match:
     # Arguments:
     #   $a0 - x coordinate (0-5)
     #   $a1 - y coordinate (0-12)
@@ -682,22 +750,22 @@ check_diag_up_square_for_match:
     jal   read_board_value
     
     # Skip if colours are the same, otherwise reset
-    beq $v0, $s3, check_diag_up_square_for_match_skip_color
+    beq $v0, $s3, check_diag_left_up_square_for_match_skip_color
     li $s2, 0
     add $s3, $zero, $v0
     
-check_diag_up_square_for_match_skip_color:
-    # cap incremeent at 3
+check_diag_left_up_square_for_match_skip_color:
+    # cap increment at 3
     li $t0, 3
-    beq $s2, $t0, check_diag_up_square_for_match_skip_increment
+    beq $s2, $t0, check_diag_left_up_square_for_match_skip_increment
     addi $s2, $s2, 1
     
-check_diag_up_square_for_match_skip_increment:
+check_diag_left_up_square_for_match_skip_increment:
     # if not 3 stored skip backfill
     li $t0, 3
-    bne $s2, $t0, check_diag_up_square_for_match_skip_fill
+    bne $s2, $t0, check_diag_left_up_square_for_match_skip_fill
     # skip if colour is black
-    beq $s3, $zero, check_diag_up_square_for_match_skip_fill
+    beq $s3, $zero, check_diag_left_up_square_for_match_skip_fill
     
     # Fill the past 3 squares with 0
     addi $a0, $s1, 0
@@ -713,23 +781,278 @@ check_diag_up_square_for_match_skip_increment:
     li $a2, 1
     jal set_removal_board_value
     
-check_diag_up_square_for_match_skip_fill:
+check_diag_left_up_square_for_match_skip_fill:
+    # increment x, != 6 go back
+    addi $s1, $s1, 1
+    addi $s0, $s0, -1
+    li $t8, -1
+    beq $s0, $t8, check_diag_left_up_skip_to_next
+    li $t8, 6
+    bne $s1, $t8, check_diag_left_up_square_for_match
+check_diag_left_up_skip_to_next:
+    # increment row
+    addi $s4, $s4, 1
+    li $t9, 13
+    bne $s4, $t9, check_diag_left_up_for_matching
+    
+    j end_check_diag_left_up_for_matching
+    
+end_check_diag_left_up_for_matching:
+    lw $ra, 0($sp)
+    lw $s0, 4($sp)
+    lw $s1, 8($sp)
+    lw $s2, 12($sp)
+    lw $s3, 16($sp)
+    lw $s4, 20($sp)
+    addi $sp, $sp, 24
+    jr $ra
+    
+# -----------------------------------------------------------------------
+# check_diag_right_bots_for_matching: Check diag in \ on floor
+# -----------------------------------------------------------------------
+check_diag_right_bots_for_matching:
+    addi  $sp, $sp, -24
+    sw    $ra, 0($sp)
+    sw    $s0, 4($sp) # cur row
+    sw    $s1, 8($sp) # cur pos
+    sw    $s2, 12($sp) # seq count
+    sw    $s3, 16($sp) # cur color
+    sw    $s4, 20($sp) # start row
+    
+    li $s4, 0
+check_diag_right_bot_for_matching:
+    li $s2, 0
+    add $s1, $zero, $s4 # pos in row
+    li $s0, 12
+check_diag_right_bot_square_for_match:
+    # Arguments:
+    #   $a0 - x coordinate (0-5)
+    #   $a1 - y coordinate (0-12)
+    # Return:
+    #   $v0 - type (0-6)
+    add   $a0, $zero, $s1
+    add   $a1, $zero, $s0
+    jal   read_board_value
+    
+    # Skip if colours are the same, otherwise reset
+    beq $v0, $s3, check_diag_right_bot_square_for_match_skip_color
+    li $s2, 0
+    add $s3, $zero, $v0
+    
+check_diag_right_bot_square_for_match_skip_color:
+    # cap increment at 3
+    li $t0, 3
+    beq $s2, $t0, check_diag_right_bot_square_for_match_skip_increment
+    addi $s2, $s2, 1
+    
+check_diag_right_bot_square_for_match_skip_increment:
+    # if not 3 stored skip backfill
+    li $t0, 3
+    bne $s2, $t0, check_diag_right_bot_square_for_match_skip_fill
+    # skip if colour is black
+    beq $s3, $zero, check_diag_right_bot_square_for_match_skip_fill
+    
+    # Fill the past 3 squares with 0
+    addi $a0, $s1, 0
+    addi $a1, $s0, 0
+    li $a2, 1
+    jal set_removal_board_value
+    addi $a0, $s1, -1
+    addi $a1, $s0, 1
+    li $a2, 1
+    jal set_removal_board_value
+    addi $a0, $s1, -2
+    addi $a1, $s0, 2
+    li $a2, 1
+    jal set_removal_board_value
+    
+check_diag_right_bot_square_for_match_skip_fill:
     # incremenet x, != 6 go back
     addi $s1, $s1, 1
     addi $s0, $s0, -1
     li $t8, -1
-    beq $s0, $t8, check_diag_up_skip_to_next
+    beq $s0, $t8, check_diag_right_bot_skip_to_next
     li $t8, 6
-    bne $s1, $t8, check_diag_up_square_for_match
-check_diag_up_skip_to_next:
+    bne $s1, $t8, check_diag_right_bot_square_for_match
+check_diag_right_bot_skip_to_next:
     # increment row
     addi $s4, $s4, 1
     li $t9, 13
-    bne $s4, $t9, check_diag_up_for_matching
+    bne $s4, $t9, check_diag_right_bot_for_matching
     
-    j end_check_diag_up_for_matching
+    j end_check_diag_right_bot_for_matching
     
-end_check_diag_up_for_matching:
+end_check_diag_right_bot_for_matching:
+    lw $ra, 0($sp)
+    lw $s0, 4($sp)
+    lw $s1, 8($sp)
+    lw $s2, 12($sp)
+    lw $s3, 16($sp)
+    lw $s4, 20($sp)
+    addi $sp, $sp, 24
+    jr $ra
+    
+# -----------------------------------------------------------------------
+# check_diag_left_downs_for_matching: Check diag in \ on left wall
+# -----------------------------------------------------------------------
+check_diag_left_downs_for_matching:
+    addi  $sp, $sp, -24
+    sw    $ra, 0($sp)
+    sw    $s0, 4($sp) # cur row
+    sw    $s1, 8($sp) # cur pos
+    sw    $s2, 12($sp) # seq count
+    sw    $s3, 16($sp) # cur color
+    sw    $s4, 20($sp) # start row
+    
+    li $s4, 0
+check_diag_left_down_for_matching:
+    li $s2, 0
+    li $s1, 0 # pos in row
+    add $s0, $zero, $s4
+check_diag_left_down_square_for_match:
+    # Arguments:
+    #   $a0 - x coordinate (0-5)
+    #   $a1 - y coordinate (0-12)
+    # Return:
+    #   $v0 - type (0-6)
+    add   $a0, $zero, $s1
+    add   $a1, $zero, $s0
+    jal   read_board_value
+    
+    # Skip if colours are the same, otherwise reset
+    beq $v0, $s3, check_diag_left_down_square_for_match_skip_color
+    li $s2, 0
+    add $s3, $zero, $v0
+    
+check_diag_left_down_square_for_match_skip_color:
+    # cap increment at 3
+    li $t0, 3
+    beq $s2, $t0, check_diag_left_down_square_for_match_skip_increment
+    addi $s2, $s2, 1
+    
+check_diag_left_down_square_for_match_skip_increment:
+    # if not 3 stored skip backfill
+    li $t0, 3
+    bne $s2, $t0, check_diag_left_down_square_for_match_skip_fill
+    # skip if colour is black
+    beq $s3, $zero, check_diag_left_down_square_for_match_skip_fill
+    
+    # Fill the past 3 squares with 0
+    addi $a0, $s1, 0
+    addi $a1, $s0, 0
+    li $a2, 1
+    jal set_removal_board_value
+    addi $a0, $s1, -1
+    addi $a1, $s0, -1
+    li $a2, 1
+    jal set_removal_board_value
+    addi $a0, $s1, -2
+    addi $a1, $s0, -2
+    li $a2, 1
+    jal set_removal_board_value
+    
+check_diag_left_down_square_for_match_skip_fill:
+    # y++ != 13 and x++ != 6 go back 
+    addi $s1, $s1, 1 # change x
+    addi $s0, $s0, 1 # change y
+    li $t8, 13
+    beq $s0, $t8, check_diag_left_down_skip_to_next
+    li $t8, 6
+    bne $s1, $t8, check_diag_left_down_square_for_match
+check_diag_left_down_skip_to_next:
+    # increment row
+    addi $s4, $s4, 1
+    li $t9, 13
+    bne $s4, $t9, check_diag_left_down_for_matching
+    
+    j end_check_diag_left_down_for_matching
+    
+end_check_diag_left_down_for_matching:
+    lw $ra, 0($sp)
+    lw $s0, 4($sp)
+    lw $s1, 8($sp)
+    lw $s2, 12($sp)
+    lw $s3, 16($sp)
+    lw $s4, 20($sp)
+    addi $sp, $sp, 24
+    jr $ra
+    
+# -----------------------------------------------------------------------
+# check_diag_right_tops_for_matching: Check diag in / on ceil
+# -----------------------------------------------------------------------
+check_diag_right_tops_for_matching:
+    addi  $sp, $sp, -24
+    sw    $ra, 0($sp)
+    sw    $s0, 4($sp) # cur row
+    sw    $s1, 8($sp) # cur pos
+    sw    $s2, 12($sp) # seq count
+    sw    $s3, 16($sp) # cur color
+    sw    $s4, 20($sp) # start row
+    
+    li $s4, 0 # x pos
+check_diag_right_top_for_matching:
+    li $s2, 0
+    add $s1, $zero, $s4 # cur x
+    li $s0, 0 # cur y
+check_diag_right_top_square_for_match:
+    # Arguments:
+    #   $a0 - x coordinate (0-5)
+    #   $a1 - y coordinate (0-12)
+    # Return:
+    #   $v0 - type (0-6)
+    add   $a0, $zero, $s1
+    add   $a1, $zero, $s0
+    jal   read_board_value
+    
+    # Skip if colours are the same, otherwise reset
+    beq $v0, $s3, check_diag_right_top_square_for_match_skip_color
+    li $s2, 0
+    add $s3, $zero, $v0
+    
+check_diag_right_top_square_for_match_skip_color:
+    # cap increment at 3
+    li $t0, 3
+    beq $s2, $t0, check_diag_right_top_square_for_match_skip_increment
+    addi $s2, $s2, 1
+    
+check_diag_right_top_square_for_match_skip_increment:
+    # if not 3 stored skip backfill
+    li $t0, 3
+    bne $s2, $t0, check_diag_right_top_square_for_match_skip_fill
+    # skip if colour is black
+    beq $s3, $zero, check_diag_right_top_square_for_match_skip_fill
+    
+    # Fill the past 3 squares with 0
+    addi $a0, $s1, 0
+    addi $a1, $s0, 0
+    li $a2, 1
+    jal set_removal_board_value
+    addi $a0, $s1, -1
+    addi $a1, $s0, -1
+    li $a2, 1
+    jal set_removal_board_value
+    addi $a0, $s1, -2
+    addi $a1, $s0, -2
+    li $a2, 1
+    jal set_removal_board_value
+    
+check_diag_right_top_square_for_match_skip_fill:
+    # y++ != 13 and x++ != 6 go back 
+    addi $s1, $s1, 1 # change x
+    addi $s0, $s0, 1 # change y
+    li $t8, 13
+    beq $s0, $t8, check_diag_right_top_skip_to_next
+    li $t8, 6
+    bne $s1, $t8, check_diag_right_top_square_for_match
+check_diag_right_top_skip_to_next:
+    # increment col
+    addi $s4, $s4, 1
+    li $t9, 13
+    bne $s4, $t9, check_diag_right_top_for_matching
+    
+    j end_check_diag_right_top_for_matching
+    
+end_check_diag_right_top_for_matching:
     lw $ra, 0($sp)
     lw $s0, 4($sp)
     lw $s1, 8($sp)
@@ -740,11 +1063,14 @@ end_check_diag_up_for_matching:
     jr $ra
 
 
+
+
 remove_marked_squares:
     addi  $sp, $sp, -8
     sw    $ra, 0($sp)
     sw    $s0, 4($sp)           # i (loop counter)
     li    $s0, 0                # i = 0 (cell index)
+    sw $zero, found_match_flag
 
 remove_marked_loop:
     # Loop 78 times (13 rows * 6 cols)
@@ -790,6 +1116,9 @@ remove_empty_gaps:
     sw    $s1, 8($sp) # cur col
     sw    $s2, 12($sp) # place row
     sw    $s3, 16($sp) # cur color
+    
+    lw $t0, piece_placed_flag
+    beq $zero, $t0, skip_reset_piece_placed_flag
     
     li $s1, 0
 pull_down_col_loop:
@@ -847,6 +1176,17 @@ end_remove_empty_gaps:
     lw $t0, found_match_flag
     bne $zero, $t0, skip_reset_piece_placed_flag
     sw $zero, piece_placed_flag
+    
+    # set cursor to (3, 0)
+    sw $zero, cursor_row
+    sw $zero, last_cursor_row
+    
+    # if the center square is filled after flag check, end game
+    li $a0, 3
+    li $a1, 0
+    jal read_board_value
+    bne $v0, $zero, end_game
+    
 skip_reset_piece_placed_flag:
     lw $ra, 0($sp)
     lw $s0, 4($sp)
@@ -907,7 +1247,7 @@ handle_input:
     beq $s0, $t3, press_z
     
     lw $t3, KEY_Q
-    beq $s0, $t3, game_end
+    beq $s0, $t3, end_game
 
     # If the pressed key doesn't match any of our handlers, do nothing.
     j input_done
@@ -965,18 +1305,18 @@ move_down:
     
 active_botton_collison:
     jal generate_next_column
-    sw $zero, cursor_row
-    sw $zero, last_cursor_row
+    
+    # set cursor to (3, -1)
+    # we do not draw the cursor if the flag is on
+    li $t0, -1
+    sw $t0, cursor_row
+    sw $t0, last_cursor_row
     li $t0, 3
     sw $t0, cursor_col
     sw $t0, last_cursor_col
+    
     li $t0, 1
     sw $t0, piece_placed_flag
-    
-    lw $a0, cursor_col
-    lw $a1, cursor_row
-    jal read_board_value
-    bne $v0, $zero, game_end
     
     li $v0, 1
     li $a0, 12
@@ -1088,14 +1428,15 @@ end_clear:
 # Arguments:
 #   $a0 - x coordinate (0-63)
 #   $a1 - y coordinate (0-63)
-#   $a2 - color (32-bit value)
+#   $a2 - color index (0-60)
 # -----------------------------------------------------------------------
 draw_pixel:
     # --- SAVE REGISTERS ---
     # Save any temporary registers we are about to modify ($t0, $t1, $t2)
     # as well as the return address ($ra).
-    addi  $sp, $sp, -4
+    addi  $sp, $sp, -8
     sw    $ra, 0($sp)
+    sw    $s0, 4($sp)
 
     # --- FUNCTION BODY ---
     lw    $t0, DISPLAY_ADDRESS  # $t0 = base display address
@@ -1104,43 +1445,46 @@ draw_pixel:
     sll   $t1, $a1, 6           # $t1 = y * 64
     add   $t1, $t1, $a0         # $t1 = y * 64 + x
     sll   $t1, $t1, 2           # $t1 = (y * 64 + x) * 4 (byte offset)
-    add   $t2, $t0, $t1         # $t2 = final address
-    sw    $a2, 0($t2)           # Draw the pixel by writing the color
+    add   $s0, $t0, $t1         # $t2 = final address
+    
+    # Load colour via id
+    add $a0, $zero, $a2
+    jal get_color
+    sw    $v0, 0($s0)           # Draw the pixel by writing the color
 
     # --- RESTORE REGISTERS ---
     lw    $ra, 0($sp)
-    addi  $sp, $sp, 4
+    lw    $s0, 4($sp)
+    addi  $sp, $sp, 8
 
     jr    $ra
+    
+# ------------------------------------------------------------------
+# get_color: given a colour id, return the hex code
+# INPUT:    $a0 = Color Index (0 to 60+)
+# OUTPUT:   $v0 = 32-bit Hex Color Code
+# ------------------------------------------------------------------
+get_color:
+    addi  $sp, $sp, -4
+    sw    $ra, 0($sp)
+    # 1. Calculate Offset: Multiply Index ($a0) by 4
+    #    Bitwise shift left by 2 is the fastest way to multiply by 4
+    sll $t0, $a0, 2     
+    
+    # 2. Get Base Address of the palette
+    la  $t1, COLOUR_PALETTE
+    
+    # 3. Add Offset to Base Address
+    add $t2, $t1, $t0   # $t2 = Address of the specific color
+    
+    # 4. Load the color value from that address
+    lw  $v0, 0($t2)     # Load value into return register
+    
+    lw    $ra, 0($sp)
+    addi  $sp, $sp, 4
 
-# -----------------------------------------------------------------------
-# Color Setter Functions
-# Description: These are helper functions to load a specific color into
-#              the drawing color register ($a2). This simplifies changing
-#              colors before calling a drawing function.
-# Postcondition: Only $a2 is modified
-# -----------------------------------------------------------------------
-set_draw_colour_black:
-    lw  $a2, COLOUR_BLACK
     jr  $ra
-set_draw_colour_blue:
-    lw  $a2, COLOUR_BLUE
-    jr  $ra
-set_draw_colour_green:
-    lw  $a2, COLOUR_GREEN
-    jr  $ra
-set_draw_colour_red:
-    lw  $a2, COLOUR_RED
-    jr  $ra
-set_draw_colour_orange:
-    lw  $a2, COLOUR_ORANGE
-    jr  $ra
-set_draw_colour_purple:
-    lw  $a2, COLOUR_PURPLE
-    jr  $ra
-set_draw_colour_yellow:
-    lw  $a2, COLOUR_YELLOW
-    jr  $ra
+    
 
 # -----------------------------------------------------------------------
 # draw_board: Iterates through the game_board array and draws a pixel
@@ -1148,9 +1492,12 @@ set_draw_colour_yellow:
 # -----------------------------------------------------------------------
 draw_board:
     # --- SAVE REGISTERS ---
-    addi  $sp, $sp, -8
+    addi  $sp, $sp, -20
     sw    $ra, 0($sp)
     sw    $s0, 4($sp)           # i (loop counter)
+    sw    $s1, 8($sp)
+    sw    $s2, 12($sp)
+    SW    $s3, 16($sp)
 
     # TODO: Add the rest of the board interface
     # Offset board from edge and add section for next piece
@@ -1165,30 +1512,13 @@ draw_board_loop:
     la    $t0, game_board       # Load base address of the board
     sll   $t1, $s0, 2           # offset = i * 4
     add   $t1, $t0, $t1         # address = &game_board[i]
-    lw    $t0, 0($t1)           # $a2 = game_board[i] (the color value)
+    lw    $a2, 0($t1)           # $a2 = game_board[i] (the color value)
 
     # Calculate 2D grid coordinates (row, col) from 1D index (i)
     li    $t1, 6
     divu  $s0, $t1
     mflo  $a1                   # $s2 (row) = i / 6 (quotient)
     mfhi  $a0                   # $s3 (col) = i % 6 (remainder)
-    
-    # At this point the arguments $a0 and $a1 for draw pixel are set
-    # Set the correct draw color based on $t0 = game_board[i]
-    jal   set_draw_colour_black
-    beq   $t0, 0, draw_board_pixel
-    jal   set_draw_colour_blue
-    beq   $t0, 1, draw_board_pixel
-    jal   set_draw_colour_green
-    beq   $t0, 2, draw_board_pixel
-    jal   set_draw_colour_red
-    beq   $t0, 3, draw_board_pixel
-    jal   set_draw_colour_orange
-    beq   $t0, 4, draw_board_pixel
-    jal   set_draw_colour_purple
-    beq   $t0, 5, draw_board_pixel
-    jal   set_draw_colour_yellow
-    beq   $t0, 6, draw_board_pixel
     
     # this should be unreachable
     # maybe use for special logic for
@@ -1197,8 +1527,32 @@ draw_board_loop:
 draw_board_pixel:
     # TODO:
     # - here would be the logic to scale pixels,
-    #       for now we draw 1x1 -> 1x1 mapping
+    #       for now we draw 1x1 -> 2x2 mapping
+    addi $s1, $a0, 1 # x offset
+    addi $s2, $a1, 1 # y offset
+    sll $s1, $s1, 2 # x * 4
+    sll $s2, $s2, 2 # y * 4
+    
+    li $s3, 0
+draw_board_pixel_loop:
+    li    $t1, 4
+    divu  $s3, $t1
+    mflo  $a1                   # dy (row) = i / 4 (quotient)
+    mfhi  $a0                   # dx (col) = i % 4 (remainder)
+
+    # Compute pixel location
+    add $a0, $a0, $s1
+    add $a1, $a1, $s2
+    
+    # Add game board shift
+    addi $a0, $a0, 3
+    addi $a1, $a1, 3
+    
     jal   draw_pixel
+    
+    addi $s3, $s3, 1
+    li $t0, 16
+    bne $t0, $s3, draw_board_pixel_loop
     
     j    continue_board_loop
     
@@ -1210,7 +1564,908 @@ draw_board_done:
     # --- RESTORE REGISTERS ---
     lw    $ra, 0($sp)
     lw    $s0, 4($sp)
-    addi  $sp, $sp, 8
+    lw    $s1, 8($sp)
+    lw    $s2, 12($sp)
+    lw    $s3, 16($sp)
+    addi  $sp, $sp, 20
     jr    $ra
     
-game_end:
+# -----------------------------------------------------------------------
+# draw_background:
+#   Renders the "Overgrown Lab" UI.
+#   Order:
+#   1. Patch Colors (Earthy Tones)
+#   2. Draw 3D Slate Wall
+#   3. Draw Vines (DFS from top, every 4px)
+#   4. Draw Industrial Pipe (Right Aligner)
+#   5. Draw Board Bezel
+#   6. Draw HUD UI
+# -----------------------------------------------------------------------
+draw_background:
+    # --- PROLOGUE ---
+    # Save $ra, $s0-$s7, $fp
+    addi $sp, $sp, -44
+    sw   $ra, 0($sp)
+    sw   $s0, 4($sp)   # x / loop counter
+    sw   $s1, 8($sp)   # y
+    sw   $s2, 12($sp)  # color / temp
+    sw   $s3, 16($sp)  # temp / row calc
+    sw   $s4, 20($sp)  # border / brick x
+    sw   $s5, 24($sp)  # fill / local x
+    sw   $s6, 28($sp)  # text color / local y
+    sw   $s7, 32($sp)  # temp / sum
+    sw   $fp, 36($sp)  # frame pointer
+
+    # ==================================================================
+    # PHASE 0: COLOR PALETTE OVERRIDE
+    # ==================================================================
+    la   $t0, COLOUR_PALETTE
+    
+    # Patch Dark Leafy Greens (Vine Palette)
+    li   $t1, 0x002F7D3F # Dark Green (Almost Black-Green shadow)
+    sw   $t1, 128($t0)
+    li   $t1, 0x002F7D3F # Deep Forest Green (Rich, cold dark green)
+    sw   $t1, 132($t0)
+    li   $t1, 0x002F7D3F # Deep Vine (Lush, organic dark green)
+    sw   $t1, 136($t0)
+    li   $t1, 0x002F7D3F # British Racing Green (Classic, premium deep leaf)
+    sw   $t1, 144($t0)
+    li   $t1, 0x002F7D3F # Phthalo Green (Cold, lush shadow tint)
+    sw   $t1, 148($t0)
+    li   $t1, 0x002F7D3F # Vine Green (The specific color of vine leaves)
+    sw   $t1, 156($t0)
+
+    # ==================================================================
+    # PHASE 1: 3D SLATE WALL
+    # ==================================================================
+    li   $s1, 0
+wall_y:
+    li   $t0, 64
+    beq  $s1, $t0, wall_end
+    li   $s0, 0
+wall_x:
+    li   $t0, 64
+    beq  $s0, $t0, wall_next
+
+    # Exclusion: x[7..30], y[7..58]
+    li   $t0, 7
+    blt  $s0, $t0, brick_logic
+    li   $t0, 31
+    bge  $s0, $t0, brick_logic
+    li   $t0, 7
+    blt  $s1, $t0, brick_logic
+    li   $t0, 59
+    bge  $s1, $t0, brick_logic
+    j    skip_draw
+
+brick_logic:
+    srl  $s3, $s1, 3        # row = y / 8
+    andi $t1, $s3, 1
+    move $s4, $s0
+    beq  $t1, $zero, calc_local
+    addi $s4, $s4, 8
+calc_local:
+    andi $s5, $s4, 15       # local x
+    andi $s6, $s1, 7        # local y
+    
+    # Grout
+    li   $t0, 15
+    beq  $s5, $t0, col_dark
+    li   $t0, 7
+    beq  $s6, $t0, col_dark
+    
+    # Gradient
+    add  $s7, $s5, $s6
+    li   $t0, 6
+    blt  $s7, $t0, col_light
+    li   $t0, 14
+    bgt  $s7, $t0, col_shadow
+    j    col_mid
+
+col_dark:
+    li   $a2, 9
+    j plot
+col_shadow:
+    li   $a2, 9
+    j plot
+col_mid:
+    li   $a2, 10
+    j plot
+col_light:
+    li   $a2, 11
+    j plot
+
+plot:
+    move $a0, $s0
+    move $a1, $s1
+    jal  draw_pixel
+
+skip_draw:
+    addi $s0, $s0, 1
+    j    wall_x
+wall_next:
+    addi $s1, $s1, 1
+    j    wall_y
+wall_end:
+
+    # ==================================================================
+    # PHASE 2: VINES (Behind UI)
+    # Start at y=0, every 4th pixel along X
+    # We reuse $s0 as the loop counter (x)
+    # ==================================================================
+    li   $s0, 0         # Start x = 0
+
+vine_loop:
+    li   $t0, 64
+    bge  $s0, $t0, end_vines
+
+    # Call DFS(x=$s0, y=0, depth=0)
+    move $a0, $s0
+    li   $a1, 0
+    li   $a2, 0
+    jal  vine_dfs
+    
+    addi $s0, $s0, 4    # Step 4
+    j    vine_loop
+
+end_vines:
+
+    # ==================================================================
+    # PHASE 3: INDUSTRIAL PIPE (Right Aligner)
+    # Location: x = 59 to 63 (Width 5)
+    # ==================================================================
+    # x=59 (Dark Edge)
+    li   $a0, 59
+    li $a1, 0
+    li $a2, 64
+    li $a3, 53
+    jal draw_vline_f
+    # x=60 (Mid)
+    li   $a0, 60
+    li $a1, 0
+    li $a2, 64
+    li $a3, 52
+    jal draw_vline_f
+    # x=61 (Highlight)
+    li   $a0, 61
+    li $a1, 0
+    li $a2, 64
+    li $a3, 50
+    jal draw_vline_f
+    # x=62 (Mid)
+    li   $a0, 62
+    li $a1, 0
+    li $a2, 64
+    li $a3, 52
+    jal draw_vline_f
+    # x=63 (Dark Edge)
+    li   $a0, 63
+    li $a1, 0
+    li $a2, 64
+    li $a3, 53
+    jal draw_vline_f
+
+    # ==================================================================
+    # PHASE 4: BEZEL (Around Board)
+    # ==================================================================
+    li   $a0, 6
+    li $a1, 6
+    li $a2, 54
+    li $a3, 11
+    jal draw_vline_f
+    li   $a0, 6
+    li $a1, 6
+    li $a2, 26
+    li $a3, 11
+    jal draw_hline_f
+    li   $a0, 31
+    li $a1, 6
+    li $a2, 54
+    li $a3, 9
+    jal draw_vline_f
+    li   $a0, 6
+    li $a1, 59
+    li $a2, 26
+    li $a3, 9
+    jal draw_hline_f
+
+    # ==================================================================
+    # PHASE 5: HUD UI (Over Vines)
+    # ==================================================================
+    # li   $s6, 54    # Text: Lavender
+    li   $s6, 0    # Text: Lavender
+    li   $s7, 58    # Border: Dark Orchid
+    li   $s5, 59    # Fill: Indigo
+
+    # --- NEXT PIECE ---
+    # Box
+    li   $a0, 34
+    li $a1, 7
+    li $a2, 6
+    li $a3, 10
+    move $s4, $s7
+    jal draw_box_f
+    # Label
+    li   $a0, 41
+    li $a1, 9
+    li $a2, 10
+    move $a3, $s6
+    jal draw_char # N
+    li   $a0, 45
+    li $a1, 9
+    li $a2, 4
+     move $a3, $s6
+    jal draw_char # E
+    li   $a0, 49
+    li $a1, 9
+    li $a2, 11
+    move $a3, $s6
+    jal draw_char # X
+    li   $a0, 53
+    li $a1, 9
+    li $a2, 7
+     move $a3, $s6
+    jal draw_char # T
+
+    # --- SCORE ---
+    # Label
+    li   $a0, 37
+    li $a1, 19
+    li $a2, 0
+    move $a3, $s6
+    jal draw_char # S
+    li   $a0, 41
+    li $a1, 19
+    li $a2, 1
+    move $a3, $s6
+    jal draw_char # C
+    li   $a0, 45
+    li $a1, 19
+    li $a2, 2
+    move $a3, $s6
+    jal draw_char # O
+    li   $a0, 49
+    li $a1, 19
+    li $a2, 3
+    move $a3, $s6
+    jal draw_char # R
+    li   $a0, 53
+    li $a1, 19
+    li $a2, 4
+    move $a3, $s6
+    jal draw_char # E
+    # Box
+    li   $a0, 34
+    li $a1, 24
+    li $a2, 23
+    li $a3, 7
+    move $s4, $s7
+    jal draw_box_f
+
+    # --- LEVEL ---
+    # Box
+    li   $a0, 34
+    li $a1, 38
+    li $a2, 23
+    li $a3, 7 
+    move $s4, $s7
+    jal draw_box_f
+    # Label
+    li   $a0, 45
+    li $a1, 33
+    li $a2, 5 # use 8 for I
+    move $a3, $s6
+    jal draw_char
+    li   $a0, 49
+    li $a1, 33
+    li $a2, 6
+    move $a3, $s6
+    jal draw_char
+    li   $a0, 53
+    li $a1, 33
+    li $a2, 5
+    move $a3, $s6
+    jal draw_char
+
+    # --- TIME ---
+    # Box
+    li   $a0, 34
+    li $a1, 52
+    li $a2, 23
+    li $a3, 7
+    move $s4, $s7
+    jal draw_box_f
+    # Label
+    li   $a0, 41
+    li $a1, 47
+    li $a2, 7
+    move $a3, $s6
+    jal draw_char
+    li   $a0, 45
+    li $a1, 47
+    li $a2, 8
+    move $a3, $s6
+    jal draw_char
+    li   $a0, 49
+    li $a1, 47
+    li $a2, 9
+    move $a3, $s6
+    jal draw_char
+    li   $a0, 53
+    li $a1, 47
+    li $a2, 4
+    move $a3, $s6
+    jal draw_char
+
+    # --- EPILOGUE ---
+    lw   $ra, 0($sp)
+    lw   $s0, 4($sp)
+    lw   $s1, 8($sp)
+    lw   $s2, 12($sp)
+    lw   $s3, 16($sp)
+    lw   $s4, 20($sp)
+    lw   $s5, 24($sp)
+    lw   $s6, 28($sp)
+    lw   $s7, 32($sp)
+    lw   $fp, 36($sp)
+    addi $sp, $sp, 44
+    jr   $ra
+
+
+# -----------------------------------------------------------------------
+# FUNCTION: vine_dfs
+# Recursive. Thickness 1. Split every 5. Sprawling logic.
+# -----------------------------------------------------------------------
+vine_dfs:
+    addi $sp, $sp, -20
+    sw   $ra, 0($sp)
+    sw   $s0, 4($sp)   # x
+    sw   $s1, 8($sp)   # y
+    sw   $s2, 12($sp)  # depth
+    sw   $s4, 16($sp)  # color
+
+    move $s0, $a0
+    move $s1, $a1
+    move $s2, $a2
+
+    # 1. Base Case: Depth > 63 or Bounds
+    li   $t0, 63
+    bgt  $s2, $t0, dfs_exit
+    blt  $s0, $zero, dfs_exit
+    bgt  $s0, $t0, dfs_exit # x > 63
+    bgt  $s1, $t0, dfs_exit # y > 63
+
+    # 2. Color based on depth (Earthy Tones)
+    # 0-20: Deep Earth (37)
+    # 20-40: Moss (36)
+    # 40+: Sage (39)
+    li   $t0, 20
+    blt  $s2, $t0, col_v_deep
+    li   $t0, 40
+    blt  $s2, $t0, col_v_mid
+    li   $s4, 39    # Sage
+    j    draw_v_px
+col_v_deep:
+    li   $s4, 37    # Deep Earth
+    j    draw_v_px
+col_v_mid:
+    li   $s4, 36    # Moss
+
+draw_v_px:
+    # 3. Draw (Thickness 1)
+    move $a0, $s0
+    move $a1, $s1
+    move $a2, $s4
+    jal  draw_pixel
+
+    # 4. Calculate Next Step
+    # Y is always +1 (gravity)
+    addi $t2, $s1, 1
+    
+    # X is Sprawling: Random(-1, 0, 1)
+    li   $v0, 42
+    li   $a0, 0
+    li   $a1, 3     # Range 0,1,2
+    syscall
+    addi $t1, $a0, -1 # -1, 0, 1
+    add  $t1, $s0, $t1 # New X
+
+    # 5. Split Logic (Every 5 depths)
+    li   $t0, 5
+    div  $s2, $t0
+    mfhi $t3        # remainder
+    bne  $t3, $zero, dfs_recurse_single
+
+    # -- SPLIT POINT --
+    # Branch 1: Current calculated direction
+    move $a0, $t1
+    move $a1, $t2
+    addi $a2, $s2, 1
+    jal  vine_dfs
+    
+    # Branch 2: Opposite-ish direction (Random again for sprawl)
+    li   $v0, 42
+    li   $a0, 0
+    li   $a1, 3
+    syscall
+    addi $t3, $a0, -1
+    add  $t3, $s0, $t3 # Another X
+    
+    move $a0, $t3
+    move $a1, $t2
+    addi $a2, $s2, 1
+    jal  vine_dfs
+    j    dfs_exit
+
+dfs_recurse_single:
+    move $a0, $t1
+    move $a1, $t2
+    addi $a2, $s2, 1
+    jal  vine_dfs
+
+dfs_exit:
+    lw   $ra, 0($sp)
+    lw   $s0, 4($sp)
+    lw   $s1, 8($sp)
+    lw   $s2, 12($sp)
+    lw   $s4, 16($sp)
+    addi $sp, $sp, 20
+    jr   $ra
+
+# -----------------------------------------------------------------------
+# HELPER: draw_box_f
+# -----------------------------------------------------------------------
+draw_box_f:
+    addi $sp, $sp, -28
+    sw   $ra, 0($sp)
+    sw   $s0, 4($sp)
+    sw   $s1, 8($sp)
+    sw   $s2, 12($sp)
+    sw   $s3, 16($sp)
+    sw   $s6, 20($sp)
+    sw   $s7, 24($sp)
+    move $s0, $a0
+    move $s1, $a1
+    add  $s2, $a0, $a2
+    add  $s3, $a1, $a3
+    move $s7, $s1
+db_y:
+    beq  $s7, $s3, db_end
+    move $s6, $s0
+db_x:
+    beq  $s6, $s2, db_next
+    beq  $s6, $s0, db_bord
+    sub  $t9, $s2, 1
+    beq  $s6, $t9, db_bord
+    beq  $s7, $s1, db_bord
+    sub  $t9, $s3, 1
+    beq  $s7, $t9, db_bord
+    move $a2, $s5
+    j    db_p
+db_bord:
+    move $a2, $s4
+db_p:
+    move $a0, $s6
+    move $a1, $s7
+    jal  draw_pixel
+    addi $s6, $s6, 1
+    j    db_x
+db_next:
+    addi $s7, $s7, 1
+    j    db_y
+db_end:
+    lw   $ra, 0($sp)
+    lw   $s0, 4($sp)
+    lw   $s1, 8($sp)
+    lw   $s2, 12($sp)
+    lw   $s3, 16($sp)
+    lw   $s6, 20($sp)
+    lw   $s7, 24($sp)
+    addi $sp, $sp, 28
+    jr   $ra
+
+# -----------------------------------------------------------------------
+# HELPER: draw_char
+# -----------------------------------------------------------------------
+draw_char:
+    addi $sp, $sp, -20
+    sw   $ra, 0($sp)
+    sw   $s0, 4($sp)
+    sw   $s1, 8($sp)
+    sw   $s2, 12($sp)
+    move $s0, $a0
+    move $s1, $a1
+    move $s2, $a3
+    beq $a2, 0, l_S
+    beq $a2, 1, l_C
+    beq $a2, 2, l_O
+    beq $a2, 3, l_R
+    beq $a2, 4, l_E
+    beq $a2, 5, l_L
+    beq $a2, 6, l_V
+    beq $a2, 7, l_T
+    beq $a2, 8, l_I
+    beq $a2, 9, l_M
+    beq $a2, 10, l_N
+    beq $a2, 11, l_X
+    j l_end
+l_S:
+    move $a0, $s0
+    move $a1, $s1
+    move $a2, $s2
+    jal draw_pixel
+    addi $a0, $s0, 1
+    jal draw_pixel
+    addi $a0, $s0, 2
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 1
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 2
+    jal draw_pixel
+    addi $a0, $s0, 1
+    jal draw_pixel
+    addi $a0, $s0, 2
+    jal draw_pixel
+    addi $a0, $s0, 2
+    addi $a1, $s1, 3
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 4
+    jal draw_pixel
+    addi $a0, $s0, 1
+    jal draw_pixel
+    addi $a0, $s0, 2
+    jal draw_pixel
+    j l_end
+l_C:
+    move $a0, $s0
+    move $a1, $s1
+    move $a2, $s2
+    jal draw_pixel
+    addi $a0, $s0, 1
+    jal draw_pixel
+    addi $a0, $s0, 2
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 1
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 2
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 3
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 4
+    jal draw_pixel
+    addi $a0, $s0, 1
+    jal draw_pixel
+    addi $a0, $s0, 2
+    jal draw_pixel
+    j l_end
+l_O:
+    move $a0, $s0
+    move $a1, $s1
+    move $a2, $s2
+    jal draw_pixel
+    addi $a0, $s0, 1
+    jal draw_pixel
+    addi $a0, $s0, 2
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 1
+    jal draw_pixel
+    addi $a0, $s0, 2
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 2
+    jal draw_pixel
+    addi $a0, $s0, 2
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 3
+    jal draw_pixel
+    addi $a0, $s0, 2
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 4
+    jal draw_pixel
+    addi $a0, $s0, 1
+    jal draw_pixel
+    addi $a0, $s0, 2
+    jal draw_pixel
+    j l_end
+l_R:
+    move $a0, $s0
+    move $a1, $s1
+    move $a2, $s2
+    jal draw_pixel
+    addi $a0, $s0, 1
+    jal draw_pixel
+    addi $a0, $s0, 2
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 1
+    jal draw_pixel
+    addi $a0, $s0, 2
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 2
+    jal draw_pixel
+    addi $a0, $s0, 1
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 3
+    jal draw_pixel
+    addi $a0, $s0, 2
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 4
+    jal draw_pixel
+    addi $a0, $s0, 2
+    jal draw_pixel
+    j l_end
+l_E:
+    move $a0, $s0
+    move $a1, $s1
+    move $a2, $s2
+    jal draw_pixel
+    addi $a0, $s0, 1
+    jal draw_pixel
+    addi $a0, $s0, 2
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 1
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 2
+    jal draw_pixel
+    addi $a0, $s0, 1
+    jal draw_pixel
+    addi $a0, $s0, 2
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 3
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 4
+    jal draw_pixel
+    addi $a0, $s0, 1
+    jal draw_pixel
+    addi $a0, $s0, 2
+    jal draw_pixel
+    j l_end
+l_L:
+    move $a0, $s0
+    move $a1, $s1
+    move $a2, $s2
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 1
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 2
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 3
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 4
+    jal draw_pixel
+    addi $a0, $s0, 1
+    jal draw_pixel
+    addi $a0, $s0, 2
+    jal draw_pixel
+    j l_end
+l_V:
+    move $a0, $s0
+    move $a1, $s1
+    move $a2, $s2
+    jal draw_pixel
+    addi $a0, $s0, 2
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 1
+    jal draw_pixel
+    addi $a0, $s0, 2
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 2
+    jal draw_pixel
+    addi $a0, $s0, 2
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 3
+    jal draw_pixel
+    addi $a0, $s0, 2
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 4
+    jal draw_pixel
+    j l_end
+l_T:
+    move $a0, $s0
+    move $a1, $s1
+    move $a2, $s2
+    jal draw_pixel
+    addi $a0, $s0, 1
+    jal draw_pixel
+    addi $a0, $s0, 2
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 1
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 2
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 3
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 4
+    jal draw_pixel
+    j l_end
+l_I:
+    addi $a0, $s0, 1
+    move $a1, $s1
+    move $a2, $s2
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 1
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 2
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 3
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 4
+    jal draw_pixel
+    j l_end
+l_M:
+    move $a0, $s0
+    move $a1, $s1
+    move $a2, $s2
+    jal draw_pixel
+    addi $a0, $s0, 2
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 1
+    jal draw_pixel
+    addi $a0, $s0, 1
+    jal draw_pixel
+    addi $a0, $s0, 2
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 2
+    jal draw_pixel
+    addi $a0, $s0, 2
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 3
+    jal draw_pixel
+    addi $a0, $s0, 2
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 4
+    jal draw_pixel
+    addi $a0, $s0, 2
+    jal draw_pixel
+    j l_end
+l_N:
+    move $a0, $s0
+    move $a1, $s1
+    move $a2, $s2
+    jal draw_pixel
+    addi $a0, $s0, 1
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 1
+    jal draw_pixel
+    addi $a0, $s0, 2
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 2
+    jal draw_pixel
+    addi $a0, $s0, 2
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 3
+    jal draw_pixel
+    addi $a0, $s0, 2
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 4
+    jal draw_pixel
+    addi $a0, $s0, 2
+    jal draw_pixel
+    j l_end
+l_X:
+    move $a0, $s0
+    move $a1, $s1
+    move $a2, $s2
+    jal draw_pixel
+    addi $a0, $s0, 2
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 1
+    jal draw_pixel
+    addi $a0, $s0, 2
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 2
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 3
+    jal draw_pixel
+    addi $a0, $s0, 2
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 4
+    jal draw_pixel
+    addi $a0, $s0, 2
+    jal draw_pixel
+l_end:
+    lw   $ra, 0($sp)
+    lw   $s0, 4($sp)
+    lw   $s1, 8($sp)
+    lw   $s2, 12($sp)
+    addi $sp, $sp, 20
+    jr   $ra
+
+# -----------------------------------------------------------------------
+# HELPER: draw_hline_f
+# -----------------------------------------------------------------------
+draw_hline_f:
+    addi $sp, $sp, -12
+    sw   $ra, 0($sp)
+    sw   $s0, 4($sp)
+    sw   $s1, 8($sp)
+    move $s0, $a0
+    add  $s1, $a0, $a2
+dh_loop:
+    beq  $s0, $s1, dh_x_end
+    move $a0, $s0
+    move $a2, $a3
+    jal  draw_pixel
+    addi $s0, $s0, 1
+    j    dh_loop
+dh_x_end:
+    lw   $ra, 0($sp)
+    lw   $s0, 4($sp)
+    lw   $s1, 8($sp)
+    addi $sp, $sp, 12
+    jr   $ra
+
+# -----------------------------------------------------------------------
+# HELPER: draw_vline_f
+# -----------------------------------------------------------------------
+draw_vline_f:
+    addi $sp, $sp, -16
+    sw   $ra, 0($sp)
+    sw   $s0, 4($sp)
+    sw   $s1, 8($sp)
+    sw   $s2, 12($sp)
+    move $s2, $a0
+    move $s0, $a1
+    add  $s1, $a1, $a2
+dv_loop:
+    beq  $s0, $s1, dv_x_end
+    move $a0, $s2
+    move $a1, $s0
+    move $a2, $a3
+    jal  draw_pixel
+    addi $s0, $s0, 1
+    j    dv_loop
+dv_x_end:
+    lw   $ra, 0($sp)
+    lw   $s0, 4($sp)
+    lw   $s1, 8($sp)
+    lw   $s2, 12($sp)
+    addi $sp, $sp, 16
+    jr   $ra
+
+end_game:

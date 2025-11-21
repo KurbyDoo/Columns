@@ -755,7 +755,7 @@ check_diag_left_up_square_for_match:
     add $s3, $zero, $v0
     
 check_diag_left_up_square_for_match_skip_color:
-    # cap incremeent at 3
+    # cap increment at 3
     li $t0, 3
     beq $s2, $t0, check_diag_left_up_square_for_match_skip_increment
     addi $s2, $s2, 1
@@ -782,7 +782,7 @@ check_diag_left_up_square_for_match_skip_increment:
     jal set_removal_board_value
     
 check_diag_left_up_square_for_match_skip_fill:
-    # incremenet x, != 6 go back
+    # increment x, != 6 go back
     addi $s1, $s1, 1
     addi $s0, $s0, -1
     li $t8, -1
@@ -808,7 +808,7 @@ end_check_diag_left_up_for_matching:
     jr $ra
     
 # -----------------------------------------------------------------------
-# check_diag_left_ups_for_matching: Check diag in / on floor
+# check_diag_right_bots_for_matching: Check diag in \ on floor
 # -----------------------------------------------------------------------
 check_diag_right_bots_for_matching:
     addi  $sp, $sp, -24
@@ -840,7 +840,7 @@ check_diag_right_bot_square_for_match:
     add $s3, $zero, $v0
     
 check_diag_right_bot_square_for_match_skip_color:
-    # cap incremeent at 3
+    # cap increment at 3
     li $t0, 3
     beq $s2, $t0, check_diag_right_bot_square_for_match_skip_increment
     addi $s2, $s2, 1
@@ -893,7 +893,7 @@ end_check_diag_right_bot_for_matching:
     jr $ra
     
 # -----------------------------------------------------------------------
-# check_diag_left_ups_for_matching: Check diag in \ on left wall
+# check_diag_left_downs_for_matching: Check diag in \ on left wall
 # -----------------------------------------------------------------------
 check_diag_left_downs_for_matching:
     addi  $sp, $sp, -24
@@ -925,7 +925,7 @@ check_diag_left_down_square_for_match:
     add $s3, $zero, $v0
     
 check_diag_left_down_square_for_match_skip_color:
-    # cap incremeent at 3
+    # cap increment at 3
     li $t0, 3
     beq $s2, $t0, check_diag_left_down_square_for_match_skip_increment
     addi $s2, $s2, 1
@@ -978,7 +978,7 @@ end_check_diag_left_down_for_matching:
     jr $ra
     
 # -----------------------------------------------------------------------
-# check_diag_left_ups_for_matching: Check diag in \ on ceil
+# check_diag_right_tops_for_matching: Check diag in / on ceil
 # -----------------------------------------------------------------------
 check_diag_right_tops_for_matching:
     addi  $sp, $sp, -24
@@ -1010,7 +1010,7 @@ check_diag_right_top_square_for_match:
     add $s3, $zero, $v0
     
 check_diag_right_top_square_for_match_skip_color:
-    # cap incremeent at 3
+    # cap increment at 3
     li $t0, 3
     beq $s2, $t0, check_diag_right_top_square_for_match_skip_increment
     addi $s2, $s2, 1
@@ -1566,7 +1566,7 @@ draw_board_done:
     lw    $s0, 4($sp)
     lw    $s1, 8($sp)
     lw    $s2, 12($sp)
-    lw    $s2, 16($sp)
+    lw    $s3, 16($sp)
     addi  $sp, $sp, 20
     jr    $ra
     

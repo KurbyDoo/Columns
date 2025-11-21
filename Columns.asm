@@ -1413,9 +1413,12 @@ set_draw_colour_yellow:
 # -----------------------------------------------------------------------
 draw_board:
     # --- SAVE REGISTERS ---
-    addi  $sp, $sp, -8
+    addi  $sp, $sp, -20
     sw    $ra, 0($sp)
     sw    $s0, 4($sp)           # i (loop counter)
+    sw    $s1, 8($sp)
+    sw    $s2, 12($sp)
+    SW    $s3, 16($sp)
 
     # TODO: Add the rest of the board interface
     # Offset board from edge and add section for next piece
@@ -1462,8 +1465,26 @@ draw_board_loop:
 draw_board_pixel:
     # TODO:
     # - here would be the logic to scale pixels,
-    #       for now we draw 1x1 -> 1x1 mapping
+    #       for now we draw 1x1 -> 2x2 mapping
+    addi $s1, $a0, 1 # x offset
+    addi $s2, $a1, 1 # y offset
+    sll $s1, $s1, 2 # x * 4
+    sll $s2, $s2, 2 # y * 4
+    
+    li $s3, 0
+draw_board_pixel_loop:
+    li    $t1, 4
+    divu  $s3, $t1
+    mflo  $a1                   # dy (row) = i / 4 (quotient)
+    mfhi  $a0                   # dx (col) = i % 4 (remainder)
+
+    add $a0, $a0, $s1
+    add $a1, $a1, $s2
     jal   draw_pixel
+    
+    addi $s3, $s3, 1
+    li $t0, 16
+    bne $t0, $s3, draw_board_pixel_loop
     
     j    continue_board_loop
     
@@ -1475,7 +1496,10 @@ draw_board_done:
     # --- RESTORE REGISTERS ---
     lw    $ra, 0($sp)
     lw    $s0, 4($sp)
-    addi  $sp, $sp, 8
+    lw    $s1, 8($sp)
+    lw    $s2, 12($sp)
+    lw    $s2, 16($sp)
+    addi  $sp, $sp, 20
     jr    $ra
     
 end_game:

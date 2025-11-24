@@ -110,6 +110,12 @@ COLOUR_PALETTE:
     COLOUR_SLATE_BLUE:  .word 0x006A5ACD
 
 # -----------------------------------------------------------------------
+# Gravity Variables
+# -----------------------------------------------------------------------
+gravity_timer:      .word 0     # Increments every frame
+gravity_threshold:  .word 60    # Drop every x frames (Adjust this to change speed, 60 is approx 1 sec, 30 is 2x speed...)
+
+# -----------------------------------------------------------------------
 # Game State
 # -----------------------------------------------------------------------
 # Current cursor position on the game grid (column and row)
@@ -129,8 +135,9 @@ KEY_DOWN:  .word 0x73 # 's'
 KEY_LEFT:  .word 0x61 # 'a'
 KEY_RIGHT: .word 0x64 # 'd'
 
-KEY_Z: .word 0x7A # 'z'
-KEY_Q: .word 0x71 # 'q'
+KEY_Z: .word 0x7A # 'z' change order
+KEY_Q: .word 0x71 # 'q' quit(game over) now you need to press q twice to exit execution. 1st time to game over screen (can restart), 2nd time exit execution
+KEY_R: .word 0x72 # 'r' restart
 
 # -----------------------------------------------------------------------
 # Game Board Representation
@@ -168,6 +175,76 @@ newline: .asciiz "\n"
 # Main Program Entry Point
 # =======================================================================
 main:
+
+# 1. Initialize Screen
+    jal clear_screen
+    
+    # --- FEATURE 3: DIFFICULTY SELECTION START ---
+    
+    # 2. Draw Start Menu Text (Manual pixel drawing or helper text)
+    # We will just draw colorful "E M H" letters for Easy/Med/Hard
+    
+    # Draw 'E' (Easy) in Green at (10, 25)
+    li $a0, 10
+    li $a1, 25
+    li $a2, 4      # 'E'
+    li $a3, 2      # Green Color ID
+    jal draw_char
+    
+    # Draw 'M' (Medium) in Yellow at (20, 25)
+    li $a0, 20
+    li $a1, 25
+    li $a2, 9      # 'M'
+    li $a3, 6      # Yellow Color ID
+    jal draw_char
+    
+    # Draw 'H' (Hard) in Red at (30, 25)
+    li $a0, 30
+    li $a1, 25
+    li $a2, 11     # 'X' (used as H/Hard symbol or just generic) 
+    li $a3, 3      # Red Color ID
+    jal draw_char
+
+menu_input_loop:
+    # Check Keyboard
+    lw $t0, KEYBOARD_FLAG
+    lw $t1, 0($t0)
+    beq $t1, $zero, menu_wait
+    
+    lw $t0, KEYBOARD_DATA
+    lw $s0, 0($t0)
+    
+    # Check Inputs (Use Numbers 1, 2, 3)
+    beq $s0, 0x31, set_easy   # '1'
+    beq $s0, 0x32, set_med    # '2'
+    beq $s0, 0x33, set_hard   # '3'
+    
+    j menu_wait
+
+set_easy:
+    li $t0, 60                 # Slow (1.0s)
+    sw $t0, gravity_threshold
+    j start_game_sequence
+
+set_med:
+    li $t0, 30                 # Med (0.5s)
+    sw $t0, gravity_threshold
+    j start_game_sequence
+
+set_hard:
+    li $t0, 10                 # Fast (0.16s)
+    sw $t0, gravity_threshold
+    j start_game_sequence
+
+menu_wait:
+    li $v0, 32
+    li $a0, 50
+    syscall
+    j menu_input_loop
+    
+    # --- FEATURE 3 END ---
+
+start_game_sequence:
     # Initialization: These functions run once at the start.
     jal clear_screen
     jal draw_background
@@ -230,6 +307,8 @@ game_loop:
 
     # TODO:
     # - Gravity logic
+    jal apply_gravity
+    
     jal update_game_logic
     
     # TODO:
@@ -282,6 +361,76 @@ end_update_game_logic:
     
     jr     $ra
 
+# -----------------------------------------------------------------------
+# apply_gravity: Checks timer and forces piece down if needed
+# -----------------------------------------------------------------------
+apply_gravity:
+    addi $sp, $sp, -8
+    sw   $ra, 0($sp)
+    sw   $s0, 4($sp)
+
+    # 1. Update Timer
+    lw   $t0, gravity_timer
+    addi $t0, $t0, 1        # Increment timer
+    sw   $t0, gravity_timer # Save it back
+
+    # 2. Check if we reached the threshold
+    lw   $t1, gravity_threshold
+    blt  $t0, $t1, apply_gravity_done # If timer < threshold, exit
+
+    # 3. Trigger Gravity! Reset timer first.
+    sw   $zero, gravity_timer
+
+    # 4. Attempt to Move Down
+    # (Logic mirrors move_down but safely uses stack and returns via jr $ra)
+    
+    # Load current row
+    lw    $s0, cursor_row
+    
+    # Check if we are at the bottom (Row 12)
+    li    $t0, 12
+    beq   $s0, $t0, gravity_collision  # Collision with floor
+    
+    # Calculate potential new row (current + 1)
+    addi  $s0, $s0, 1
+    
+    # Check collision with existing blocks at (cursor_col, new_row)
+    lw    $a0, cursor_col
+    move  $a1, $s0      # The new row
+    jal   read_board_value
+    
+    # If read_board_value returns non-zero ($v0 != 0), we hit a block
+    bne   $v0, $zero, gravity_collision
+    
+    # 5. Move is valid: Update cursor position
+    sw    $s0, cursor_row
+    j     apply_gravity_done
+
+gravity_collision:
+    # We hit somethingm Lock the piece.
+    
+    # 1. Generate the next column immediately
+    jal generate_next_column
+    
+    # 2. Reset cursor to top (hidden position)
+    li $t0, -1
+    sw $t0, cursor_row
+    sw $t0, last_cursor_row
+    li $t0, 3
+    sw $t0, cursor_col
+    sw $t0, last_cursor_col
+    
+    # 3. Set the flag so update_game_logic will check for matches
+    li $t0, 1
+    sw $t0, piece_placed_flag
+    
+
+apply_gravity_done:
+    lw   $s0, 4($sp)
+    lw   $ra, 0($sp)
+    addi $sp, $sp, 8
+    jr   $ra
+    
 # -----------------------------------------------------------------------
 # set_removal_board_value: Sets the value at a specified location on the board
 # Arguments:
@@ -545,6 +694,28 @@ check_for_matching:
     # If the flag is zero, then we didnt place a piece
     lw $t0, piece_placed_flag
     beq $zero, $t0, end_check_for_matching
+    
+# ==========================================================
+# FEATURE 2: GRADUAL SPEED INCREASE
+# ==========================================================
+    # Logic: If we just placed a piece, make the game slightly faster
+    # by decreasing the gravity_threshold.
+    
+    la   $t5, gravity_threshold    # Get address of threshold
+    lw   $t6, 0($t5)               # Load current speed value
+    
+    # Safety Check: Don't let it go below 10 frames 
+    # If we go too low, the game becomes unplayable or glitches.
+    li   $t7, 10
+    ble  $t6, $t7, skip_speed_increase
+    
+    # Decrease threshold by 5 ^^^CHANGE SPEED HERE
+    subi $t6, $t6, 5
+    
+    # Save the new speed back to memory
+    sw   $t6, 0($t5)
+
+skip_speed_increase:
     
     # We check all columns and all rows
     jal check_rows_for_matching
@@ -2088,6 +2259,8 @@ draw_char:
     beq $a2, 9, l_M
     beq $a2, 10, l_N
     beq $a2, 11, l_X
+    beq $a2, 12, l_G
+    beq $a2, 13, l_A
     j l_end
 l_S:
     move $a0, $s0
@@ -2408,6 +2581,81 @@ l_X:
     jal draw_pixel
     addi $a0, $s0, 2
     jal draw_pixel
+    j l_end
+l_G:
+    # Top bar
+    move $a0, $s0
+    move $a1, $s1
+    move $a2, $s2
+    jal draw_pixel
+    addi $a0, $s0, 1
+    jal draw_pixel
+    addi $a0, $s0, 2
+    jal draw_pixel
+    # Left bar
+    move $a0, $s0
+    addi $a1, $s1, 1
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 2
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 3
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 4
+    jal draw_pixel
+    # Bottom bar
+    addi $a0, $s0, 1
+    addi $a1, $s1, 4
+    jal draw_pixel
+    addi $a0, $s0, 2
+    jal draw_pixel
+    # Hook
+    addi $a0, $s0, 2
+    addi $a1, $s1, 3
+    jal draw_pixel
+    addi $a0, $s0, 2
+    addi $a1, $s1, 2
+    jal draw_pixel
+    j l_end
+l_A:
+    # Top center
+    addi $a0, $s0, 1
+    move $a1, $s1
+    move $a2, $s2
+    jal draw_pixel
+    # Left leg
+    move $a0, $s0
+    addi $a1, $s1, 1
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 2
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 3
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 4
+    jal draw_pixel
+    # Right leg
+    addi $a0, $s0, 2
+    addi $a1, $s1, 1
+    jal draw_pixel
+    addi $a0, $s0, 2
+    addi $a1, $s1, 2
+    jal draw_pixel
+    addi $a0, $s0, 2
+    addi $a1, $s1, 3
+    jal draw_pixel
+    addi $a0, $s0, 2
+    addi $a1, $s1, 4
+    jal draw_pixel
+    # Middle bar
+    addi $a0, $s0, 1
+    addi $a1, $s1, 2
+    jal draw_pixel
+    j l_end
 l_end:
     lw   $ra, 0($sp)
     lw   $s0, 4($sp)
@@ -2469,3 +2717,126 @@ dv_x_end:
     jr   $ra
 
 end_game:
+    # 1. Paint a black box over the play area (approx x=6 to 31, y=6 to 58)
+    li $a0, 6
+    li $a1, 6
+    li $a2, 26    # Width
+    li $a3, 53    # Height
+    li $s5, 0     # Black color 
+    #jal draw_box_f
+    # Drawong text over the mess, it looks cooler. 
+    # Gave up on setting registeers for jal draw_box_f :P
+    
+    # 2. Draw "GAME"
+    li $s6, 3      # RED color for "GAME OVER"
+    
+    li $a0, 10
+    li $a1, 20
+    li $a2, 12     # G
+    move $a3, $s6
+    jal draw_char
+    
+    li $a0, 14
+    li $a1, 20
+    li $a2, 13     # A
+    move $a3, $s6
+    jal draw_char
+    
+    li $a0, 18
+    li $a1, 20
+    li $a2, 9      # M
+    move $a3, $s6
+    jal draw_char
+    
+    li $a0, 22
+    li $a1, 20
+    li $a2, 4      # E
+    move $a3, $s6
+    jal draw_char
+
+    # 3. Draw "OVER"
+    li $a0, 10
+    li $a1, 26
+    li $a2, 2      # O
+    move $a3, $s6
+    jal draw_char
+
+    li $a0, 14
+    li $a1, 26
+    li $a2, 6      # V
+    move $a3, $s6
+    jal draw_char
+
+    li $a0, 18
+    li $a1, 26
+    li $a2, 4      # E
+    move $a3, $s6
+    jal draw_char
+
+    li $a0, 22
+    li $a1, 26
+    li $a2, 3      # R
+    move $a3, $s6
+    jal draw_char
+    
+    game_over_input_loop:
+    # Poll keyboard
+    lw $t0, KEYBOARD_FLAG
+    lw $t1, 0($t0)
+    beq $t1, $zero, game_over_wait
+    
+    lw $t0, KEYBOARD_DATA
+    lw $s0, 0($t0)
+    
+    # Check for 'r' (Retry)
+    lw $t3, KEY_R
+    beq $s0, $t3, reset_game
+    
+    # Check for 'q' (Quit)
+    lw $t3, KEY_Q
+    beq $s0, $t3, real_exit
+
+game_over_wait:
+    li $v0, 32
+    li $a0, 50
+    syscall
+    j game_over_input_loop
+
+real_exit:
+    li $v0, 10
+    syscall
+    
+# -----------------------------------------------------------------------
+# reset_game: Zeros out the board and jumps to main
+# -----------------------------------------------------------------------
+reset_game:
+    # 1. Zero out game_board memory
+    la $t0, game_board
+    li $t1, 312      # 78 words * 4 bytes
+    add $t2, $t0, $t1 # End address
+    
+reset_loop:
+    beq $t0, $t2, reset_done
+    sw $zero, 0($t0)
+    addi $t0, $t0, 4
+    j reset_loop
+
+reset_done:
+    # 2. Reset removal board too (just in case)
+    la $t0, removal_game_board
+    li $t1, 312
+    add $t2, $t0, $t1
+    
+reset_rem_loop:
+    beq $t0, $t2, finish_reset
+    sw $zero, 0($t0)
+    addi $t0, $t0, 4
+    j reset_rem_loop
+
+finish_reset:
+    # 3. Reset Cursor defaults
+    sw $zero, cursor_col
+    sw $zero, cursor_row
+    
+    # 4. Jump to start
+    j main

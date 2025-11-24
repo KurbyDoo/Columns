@@ -126,6 +126,10 @@ last_cursor_row:    .word 0
 
 piece_placed_flag:  .word 0 
 found_match_flag:   .word 0
+game_score:         .word 12345
+game_time:          .word 0
+game_level:         .word 0
+game_frame_counter: .word 0
 
 # -----------------------------------------------------------------------
 # Keyboard ASCII Values
@@ -323,12 +327,35 @@ game_loop:
     li $a0, 16 # sleep for 16ms (approx 60 FPS)
     syscall
     
+    jal update_frame_counter
+    
     # 5. Repeat
     j game_loop
 
 # =======================================================================
 # Game Logic
 # =======================================================================
+
+update_frame_counter:
+    addi $sp, $sp, -4
+    sw $ra, 0($sp)
+    
+    lw $t0, game_frame_counter
+    addi $t0, $t0, 1
+    sw $t0, game_frame_counter
+    bne $t0, 60, end_update_frame_counter
+    # Reset frame counter and inc time
+    li $t0, 0
+    sw $t0, game_frame_counter
+    lw $t0, game_time
+    addi $t0, $t0, 1
+    sw $t0, game_time
+    
+end_update_frame_counter:
+    lw $ra, 0($sp)
+    addi $sp, $sp, 4
+    
+    jr $ra
 
 # -----------------------------------------------------------------------
 # update_game_logic: Updates the state of the game for one frame.
@@ -381,9 +408,6 @@ apply_gravity:
 
     # 3. Trigger Gravity! Reset timer first.
     sw   $zero, gravity_timer
-
-    # 4. Attempt to Move Down
-    # (Logic mirrors move_down but safely uses stack and returns via jr $ra)
     
     # Load current row
     lw    $s0, cursor_row
@@ -1752,37 +1776,810 @@ draw_score:
     sw $s0, 4($sp)
     sw $s1, 8($sp)
     
+    # Draw next piece display
     la $s0, next_column_colours
     li $s1, 9
 draw_next_piece_loop:
     # Draw next piece
-    addi $a0, $zero, 36
-    add $a1, $zero, $s1
-    lw $a2, 0($s0) 
-    jal draw_pixel
-    addi $a0, $zero, 37
+    addi $a0, $zero, 35
     add $a1, $zero, $s1
     lw $a2, 0($s0) 
     jal draw_pixel
     addi $a0, $zero, 36
+    add $a1, $zero, $s1
+    lw $a2, 0($s0) 
+    jal draw_pixel
+    addi $a0, $zero, 35
     addi $a1, $s1, 1
     lw $a2, 0($s0) 
     jal draw_pixel
-    addi $a0, $zero, 37
+    addi $a0, $zero, 36
     addi $a1, $s1, 1
     lw $a2, 0($s0) 
     jal draw_pixel
     
     addi $s1, $s1, 2
     addi $s0, $s0, 4
-    li $t0, 15
-    bne $s1, $t0, draw_next_piece_loop
+    bne $s1, 15, draw_next_piece_loop
+
+draw_score_display:
+    lw $s0, game_score
+    li $s1, 54
+draw_score_display_loop:
+    li    $t1, 10
+    divu  $s0, $t1
+    mflo  $s0                   # s0 // 10
+    mfhi  $a2                   # s0 % 10
+    
+    addi $a0, $s1, 0
+    li $a1, 25
+    jal draw_number
+    
+    addi $s1, $s1, -4
+    bne $s1, 30, draw_score_display_loop
+
+    # Draw level
+    lw $s0, game_level
+    li $s1, 54
+draw_level_display_loop:
+    li    $t1, 10
+    divu  $s0, $t1
+    mflo  $s0                   # s0 // 10
+    mfhi  $a2                   # s0 % 10
+    
+    addi $a0, $s1, 0
+    li $a1, 39
+    jal draw_number
+    
+    addi $s1, $s1, -4
+    bne $s1, 30, draw_level_display_loop
+
+    # Draw time
+    lw $s0, game_time
+    li $s1, 54
+draw_time_display_loop:
+    li    $t1, 10
+    divu  $s0, $t1
+    mflo  $s0                   # s0 // 10
+    mfhi  $a2                   # s0 % 10
+    
+    addi $a0, $s1, 0
+    li $a1, 53
+    jal draw_number
+    
+    addi $s1, $s1, -4
+    bne $s1, 30, draw_time_display_loop
 
 end_draw_score:
     lw $ra, 0($sp)
     lw $s0, 4($sp)
     lw $s1, 8($sp)
     addi $sp, $sp, 12
+    
+    jr $ra
+    
+# ---
+# Draw number: draw a number
+# a0 x-pos
+# a1 y-pos
+# a2 value (0-9)
+# ---
+draw_number:
+    addi $sp, $sp, -20
+    sw $ra, 0($sp)
+    sw $s0, 4($sp)
+    sw $s1, 8($sp)
+    sw $s2, 12($sp)
+    sw $s3, 16($sp)
+    # li   $s6, 0    # Text: Lavender
+    # li   $s7, 58    # Border: Dark Orchid
+    # li   $s5, 59    # Fill: Indigo
+    
+    move $s0, $a0
+    move $s1, $a1
+    li $s2, 7       # Color: WHITE
+    li $s3, 59      # Color: Background
+    
+    beq $a2, 0, draw_number_0
+    beq $a2, 1, draw_number_1
+    beq $a2, 2, draw_number_2
+    beq $a2, 3, draw_number_3
+    beq $a2, 4, draw_number_4
+    beq $a2, 5, draw_number_5
+    beq $a2, 6, draw_number_6
+    beq $a2, 7, draw_number_7
+    beq $a2, 8, draw_number_8
+    beq $a2, 9, draw_number_9
+    
+    j end_draw_number
+draw_number_0:
+    # LEFT COL
+    addi $a0, $s0, 0
+    addi $a1, $s1, 0
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 0
+    addi $a1, $s1, 1
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 0
+    addi $a1, $s1, 2
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 0
+    addi $a1, $s1, 3
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 0
+    addi $a1, $s1, 4
+    addi $a2, $s2, 0
+    jal draw_pixel
+    
+    # MID COL
+    addi $a0, $s0, 1
+    addi $a1, $s1, 0
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 1
+    addi $a2, $s3, 0
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 2
+    addi $a2, $s3, 0
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 3
+    addi $a2, $s3, 0
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 4
+    addi $a2, $s2, 0
+    jal draw_pixel
+    
+    # RIGHT COL
+    addi $a0, $s0, 2
+    addi $a1, $s1, 0
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 2
+    addi $a1, $s1, 1
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 2
+    addi $a1, $s1, 2
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 2
+    addi $a1, $s1, 3
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 2
+    addi $a1, $s1, 4
+    addi $a2, $s2, 0
+    jal draw_pixel
+    
+    j end_draw_number
+draw_number_1:
+    # LEFT COL
+    addi $a0, $s0, 0
+    addi $a1, $s1, 0
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 0
+    addi $a1, $s1, 1
+    addi $a2, $s3, 0
+    jal draw_pixel
+    addi $a0, $s0, 0
+    addi $a1, $s1, 2
+    addi $a2, $s3, 0
+    jal draw_pixel
+    addi $a0, $s0, 0
+    addi $a1, $s1, 3
+    addi $a2, $s3, 0
+    jal draw_pixel
+    addi $a0, $s0, 0
+    addi $a1, $s1, 4
+    addi $a2, $s2, 0
+    jal draw_pixel
+    
+    # MID COL
+    addi $a0, $s0, 1
+    addi $a1, $s1, 0
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 1
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 2
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 3
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 4
+    addi $a2, $s2, 0
+    jal draw_pixel
+    
+    # RIGHT COL
+    addi $a0, $s0, 2
+    addi $a1, $s1, 0
+    addi $a2, $s3, 0
+    jal draw_pixel
+    addi $a0, $s0, 2
+    addi $a1, $s1, 1
+    addi $a2, $s3, 0
+    jal draw_pixel
+    addi $a0, $s0, 2
+    addi $a1, $s1, 2
+    addi $a2, $s3, 0
+    jal draw_pixel
+    addi $a0, $s0, 2
+    addi $a1, $s1, 3
+    addi $a2, $s3, 0
+    jal draw_pixel
+    addi $a0, $s0, 2
+    addi $a1, $s1, 4
+    addi $a2, $s2, 0
+    jal draw_pixel
+    
+    j end_draw_number
+draw_number_2:
+    # LEFT COL
+    addi $a0, $s0, 0
+    addi $a1, $s1, 0
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 0
+    addi $a1, $s1, 1
+    addi $a2, $s3, 0
+    jal draw_pixel
+    addi $a0, $s0, 0
+    addi $a1, $s1, 2
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 0
+    addi $a1, $s1, 3
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 0
+    addi $a1, $s1, 4
+    addi $a2, $s2, 0
+    jal draw_pixel
+    
+    # MID COL
+    addi $a0, $s0, 1
+    addi $a1, $s1, 0
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 1
+    addi $a2, $s3, 0
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 2
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 3
+    addi $a2, $s3, 0
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 4
+    addi $a2, $s2, 0
+    jal draw_pixel
+    
+    # RIGHT COL
+    addi $a0, $s0, 2
+    addi $a1, $s1, 0
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 2
+    addi $a1, $s1, 1
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 2
+    addi $a1, $s1, 2
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 2
+    addi $a1, $s1, 3
+    addi $a2, $s3, 0
+    jal draw_pixel
+    addi $a0, $s0, 2
+    addi $a1, $s1, 4
+    addi $a2, $s2, 0
+    jal draw_pixel
+    
+    j end_draw_number
+draw_number_3:
+    # LEFT COL
+    addi $a0, $s0, 0
+    addi $a1, $s1, 0
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 0
+    addi $a1, $s1, 1
+    addi $a2, $s3, 0
+    jal draw_pixel
+    addi $a0, $s0, 0
+    addi $a1, $s1, 2
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 0
+    addi $a1, $s1, 3
+    addi $a2, $s3, 0
+    jal draw_pixel
+    addi $a0, $s0, 0
+    addi $a1, $s1, 4
+    addi $a2, $s2, 0
+    jal draw_pixel
+    
+    # MID COL
+    addi $a0, $s0, 1
+    addi $a1, $s1, 0
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 1
+    addi $a2, $s3, 0
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 2
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 3
+    addi $a2, $s3, 0
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 4
+    addi $a2, $s2, 0
+    jal draw_pixel
+    
+    # RIGHT COL
+    addi $a0, $s0, 2
+    addi $a1, $s1, 0
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 2
+    addi $a1, $s1, 1
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 2
+    addi $a1, $s1, 2
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 2
+    addi $a1, $s1, 3
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 2
+    addi $a1, $s1, 4
+    addi $a2, $s2, 0
+    jal draw_pixel
+    
+    j end_draw_number
+draw_number_4:
+    # LEFT COL
+    addi $a0, $s0, 0
+    addi $a1, $s1, 0
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 0
+    addi $a1, $s1, 1
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 0
+    addi $a1, $s1, 2
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 0
+    addi $a1, $s1, 3
+    addi $a2, $s3, 0
+    jal draw_pixel
+    addi $a0, $s0, 0
+    addi $a1, $s1, 4
+    addi $a2, $s3, 0
+    jal draw_pixel
+    
+    # MID COL
+    addi $a0, $s0, 1
+    addi $a1, $s1, 0
+    addi $a2, $s3, 0
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 1
+    addi $a2, $s3, 0
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 2
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 3
+    addi $a2, $s3, 0
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 4
+    addi $a2, $s3, 0
+    jal draw_pixel
+    
+    # RIGHT COL
+    addi $a0, $s0, 2
+    addi $a1, $s1, 0
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 2
+    addi $a1, $s1, 1
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 2
+    addi $a1, $s1, 2
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 2
+    addi $a1, $s1, 3
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 2
+    addi $a1, $s1, 4
+    addi $a2, $s2, 0
+    jal draw_pixel
+    
+    j end_draw_number
+draw_number_5:
+    # LEFT COL
+    addi $a0, $s0, 0
+    addi $a1, $s1, 0
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 0
+    addi $a1, $s1, 1
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 0
+    addi $a1, $s1, 2
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 0
+    addi $a1, $s1, 3
+    addi $a2, $s3, 0
+    jal draw_pixel
+    addi $a0, $s0, 0
+    addi $a1, $s1, 4
+    addi $a2, $s2, 0
+    jal draw_pixel
+    
+    # MID COL
+    addi $a0, $s0, 1
+    addi $a1, $s1, 0
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 1
+    addi $a2, $s3, 0
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 2
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 3
+    addi $a2, $s3, 0
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 4
+    addi $a2, $s2, 0
+    jal draw_pixel
+    
+    # RIGHT COL
+    addi $a0, $s0, 2
+    addi $a1, $s1, 0
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 2
+    addi $a1, $s1, 1
+    addi $a2, $s3, 0
+    jal draw_pixel
+    addi $a0, $s0, 2
+    addi $a1, $s1, 2
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 2
+    addi $a1, $s1, 3
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 2
+    addi $a1, $s1, 4
+    addi $a2, $s2, 0
+    jal draw_pixel
+    
+    j end_draw_number
+draw_number_6:
+    # LEFT COL
+    addi $a0, $s0, 0
+    addi $a1, $s1, 0
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 0
+    addi $a1, $s1, 1
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 0
+    addi $a1, $s1, 2
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 0
+    addi $a1, $s1, 3
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 0
+    addi $a1, $s1, 4
+    addi $a2, $s2, 0
+    jal draw_pixel
+    
+    # MID COL
+    addi $a0, $s0, 1
+    addi $a1, $s1, 0
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 1
+    addi $a2, $s3, 0
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 2
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 3
+    addi $a2, $s3, 0
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 4
+    addi $a2, $s2, 0
+    jal draw_pixel
+    
+    # RIGHT COL
+    addi $a0, $s0, 2
+    addi $a1, $s1, 0
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 2
+    addi $a1, $s1, 1
+    addi $a2, $s3, 0
+    jal draw_pixel
+    addi $a0, $s0, 2
+    addi $a1, $s1, 2
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 2
+    addi $a1, $s1, 3
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 2
+    addi $a1, $s1, 4
+    addi $a2, $s2, 0
+    jal draw_pixel
+    
+    j end_draw_number
+draw_number_7:
+    # LEFT COL
+    addi $a0, $s0, 0
+    addi $a1, $s1, 0
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 0
+    addi $a1, $s1, 1
+    addi $a2, $s3, 0
+    jal draw_pixel
+    addi $a0, $s0, 0
+    addi $a1, $s1, 2
+    addi $a2, $s3, 0
+    jal draw_pixel
+    addi $a0, $s0, 0
+    addi $a1, $s1, 3
+    addi $a2, $s3, 0
+    jal draw_pixel
+    addi $a0, $s0, 0
+    addi $a1, $s1, 4
+    addi $a2, $s3, 0
+    jal draw_pixel
+    
+    # MID COL
+    addi $a0, $s0, 1
+    addi $a1, $s1, 0
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 1
+    addi $a2, $s3, 0
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 2
+    addi $a2, $s3, 0
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 3
+    addi $a2, $s3, 0
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 4
+    addi $a2, $s3, 0
+    jal draw_pixel
+    
+    # RIGHT COL
+    addi $a0, $s0, 2
+    addi $a1, $s1, 0
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 2
+    addi $a1, $s1, 1
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 2
+    addi $a1, $s1, 2
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 2
+    addi $a1, $s1, 3
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 2
+    addi $a1, $s1, 4
+    addi $a2, $s2, 0
+    jal draw_pixel
+    
+    j end_draw_number
+draw_number_8:
+    # LEFT COL
+    addi $a0, $s0, 0
+    addi $a1, $s1, 0
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 0
+    addi $a1, $s1, 1
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 0
+    addi $a1, $s1, 2
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 0
+    addi $a1, $s1, 3
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 0
+    addi $a1, $s1, 4
+    addi $a2, $s2, 0
+    jal draw_pixel
+    
+    # MID COL
+    addi $a0, $s0, 1
+    addi $a1, $s1, 0
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 1
+    addi $a2, $s3, 0
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 2
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 3
+    addi $a2, $s3, 0
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 4
+    addi $a2, $s2, 0
+    jal draw_pixel
+    
+    # RIGHT COL
+    addi $a0, $s0, 2
+    addi $a1, $s1, 0
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 2
+    addi $a1, $s1, 1
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 2
+    addi $a1, $s1, 2
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 2
+    addi $a1, $s1, 3
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 2
+    addi $a1, $s1, 4
+    addi $a2, $s2, 0
+    jal draw_pixel
+    
+    j end_draw_number
+draw_number_9:
+    # LEFT COL
+    addi $a0, $s0, 0
+    addi $a1, $s1, 0
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 0
+    addi $a1, $s1, 1
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 0
+    addi $a1, $s1, 2
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 0
+    addi $a1, $s1, 3
+    addi $a2, $s3, 0
+    jal draw_pixel
+    addi $a0, $s0, 0
+    addi $a1, $s1, 4
+    addi $a2, $s2, 0
+    jal draw_pixel
+    
+    # MID COL
+    addi $a0, $s0, 1
+    addi $a1, $s1, 0
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 1
+    addi $a2, $s3, 0
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 2
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 3
+    addi $a2, $s3, 0
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 4
+    addi $a2, $s2, 0
+    jal draw_pixel
+    
+    # RIGHT COL
+    addi $a0, $s0, 2
+    addi $a1, $s1, 0
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 2
+    addi $a1, $s1, 1
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 2
+    addi $a1, $s1, 2
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 2
+    addi $a1, $s1, 3
+    addi $a2, $s2, 0
+    jal draw_pixel
+    addi $a0, $s0, 2
+    addi $a1, $s1, 4
+    addi $a2, $s2, 0
+    jal draw_pixel
+    
+    j end_draw_number
+
+end_draw_number:
+    lw $ra, 0($sp)
+    lw $s0, 4($sp)
+    lw $s1, 8($sp)
+    lw $s2, 12($sp)
+    lw $s3, 16($sp)
+    addi $sp, $sp, 20
     
     jr $ra
 
@@ -1995,7 +2792,7 @@ end_vines:
 
     # --- NEXT PIECE ---
     # Box
-    li   $a0, 34
+    li   $a0, 33
     li $a1, 7
     li $a2, 6
     li $a3, 10
@@ -2051,18 +2848,18 @@ end_vines:
     move $a3, $s6
     jal draw_char # E
     # Box
-    li   $a0, 34
+    li   $a0, 33
     li $a1, 24
-    li $a2, 23
+    li $a2, 25
     li $a3, 7
     move $s4, $s7
     jal draw_box_f
 
     # --- LEVEL ---
     # Box
-    li   $a0, 34
+    li   $a0, 33
     li $a1, 38
-    li $a2, 23
+    li $a2, 25
     li $a3, 7 
     move $s4, $s7
     jal draw_box_f
@@ -2085,9 +2882,9 @@ end_vines:
 
     # --- TIME ---
     # Box
-    li   $a0, 34
+    li   $a0, 33
     li $a1, 52
-    li $a2, 23
+    li $a2, 25
     li $a3, 7
     move $s4, $s7
     jal draw_box_f

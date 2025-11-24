@@ -316,6 +316,7 @@ game_loop:
     # - Add next column display
     # - Scale up display?
     jal draw_board
+    jal draw_score
     
     # 4. Delay to control game speed (game tick)
     li $v0, 32
@@ -1741,6 +1742,50 @@ draw_board_done:
     addi  $sp, $sp, 20
     jr    $ra
     
+    
+# --------------------------
+# draw_score
+# -------------------------
+draw_score:
+    addi $sp, $sp, -12
+    sw $ra, 0($sp)
+    sw $s0, 4($sp)
+    sw $s1, 8($sp)
+    
+    la $s0, next_column_colours
+    li $s1, 9
+draw_next_piece_loop:
+    # Draw next piece
+    addi $a0, $zero, 36
+    add $a1, $zero, $s1
+    lw $a2, 0($s0) 
+    jal draw_pixel
+    addi $a0, $zero, 37
+    add $a1, $zero, $s1
+    lw $a2, 0($s0) 
+    jal draw_pixel
+    addi $a0, $zero, 36
+    addi $a1, $s1, 1
+    lw $a2, 0($s0) 
+    jal draw_pixel
+    addi $a0, $zero, 37
+    addi $a1, $s1, 1
+    lw $a2, 0($s0) 
+    jal draw_pixel
+    
+    addi $s1, $s1, 2
+    addi $s0, $s0, 4
+    li $t0, 15
+    bne $s1, $t0, draw_next_piece_loop
+
+end_draw_score:
+    lw $ra, 0($sp)
+    lw $s0, 4($sp)
+    lw $s1, 8($sp)
+    addi $sp, $sp, 12
+    
+    jr $ra
+
 # -----------------------------------------------------------------------
 # draw_background:
 #   Renders the "Overgrown Lab" UI.

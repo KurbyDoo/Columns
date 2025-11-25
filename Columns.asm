@@ -1291,32 +1291,9 @@ end_remove_empty_gaps:
     bne $zero, $t0, skip_reset_piece_placed_flag
     sw $zero, piece_placed_flag
     
-    # Speed increase when clear
-    la   $t5, gravity_threshold
-    lw   $t6, 0($t5)
-    
     lw $t0, game_level
     addi $t0, $t0, 1
     sw $t0, game_level
-    
-    # Cap speed
-    li   $t7, 10
-    ble  $t6, $t7, skip_speed_increase
-    
-    # We want to make this an inverse exponential curve
-    # Set Threshold to 90% every 
-    li  $t1, 10
-    lw  $t2, gravity_threshold 
-    divu  $t2, $t1
-    mflo  $t3                   # percentage 1/10,
-    sub $t6, $t6, $t3
-    
-    sw   $t6, 0($t5)
-
-skip_speed_increase:
-    
-    # Reset combo counter
-    sw $zero, current_combo
     
     # set cursor to (3, 0)
     sw $zero, cursor_row
@@ -1466,9 +1443,27 @@ active_botton_collison:
     li $t0, 1
     sw $t0, piece_placed_flag
     
-    li $v0, 1
-    li $a0, 12
-    syscall
+    # Speed increase when clear
+    la   $t5, gravity_threshold
+    lw   $t6, 0($t5)
+    
+    # Cap speed
+    li   $t7, 10
+    ble  $t6, $t7, skip_speed_increase
+    
+    # We want to make this an inverse exponential curve
+    # Set Threshold to 90% every 
+    li  $t1, 10
+    lw  $t2, gravity_threshold 
+    divu  $t2, $t1
+    mflo  $t3                   # percentage 1/10,
+    sub $t6, $t6, $t3
+    
+    sw   $t6, 0($t5)
+
+skip_speed_increase:
+    # Reset combo counter
+    sw $zero, current_combo
     
 end_attempt_move_down:
     lw $ra, 0($sp)

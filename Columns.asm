@@ -112,8 +112,8 @@ COLOUR_PALETTE:
 # -----------------------------------------------------------------------
 # Gravity Variables
 # -----------------------------------------------------------------------
-gravity_timer:      .word 0     # Increments every frame
-gravity_threshold:  .word 60    # Drop every x frames (Adjust this to change speed, 60 is approx 1 sec, 30 is 2x speed...)
+gravity_timer:      .word 0
+gravity_threshold:  .word 60 
 
 # -----------------------------------------------------------------------
 # Game State
@@ -126,10 +126,16 @@ last_cursor_row:    .word 0
 
 piece_placed_flag:  .word 0 
 found_match_flag:   .word 0
-game_score:         .word 12345
+game_score:         .word 0
 game_time:          .word 0
 game_level:         .word 0
 game_frame_counter: .word 0
+game_high_score:    .word 0
+
+base_score:         .word 1
+length_multiplier:  .word 2
+combo_multiplier:   .word 3
+current_combo:      .word 0
 
 # -----------------------------------------------------------------------
 # Keyboard ASCII Values
@@ -179,35 +185,12 @@ newline: .asciiz "\n"
 # Main Program Entry Point
 # =======================================================================
 main:
-
-# 1. Initialize Screen
     jal clear_screen
+    jal draw_background
+    jal draw_board
+    jal draw_score
     
-    # --- FEATURE 3: DIFFICULTY SELECTION START ---
-    
-    # 2. Draw Start Menu Text (Manual pixel drawing or helper text)
-    # We will just draw colorful "E M H" letters for Easy/Med/Hard
-    
-    # Draw 'E' (Easy) in Green at (10, 25)
-    li $a0, 10
-    li $a1, 25
-    li $a2, 4      # 'E'
-    li $a3, 2      # Green Color ID
-    jal draw_char
-    
-    # Draw 'M' (Medium) in Yellow at (20, 25)
-    li $a0, 20
-    li $a1, 25
-    li $a2, 9      # 'M'
-    li $a3, 6      # Yellow Color ID
-    jal draw_char
-    
-    # Draw 'H' (Hard) in Red at (30, 25)
-    li $a0, 30
-    li $a1, 25
-    li $a2, 11     # 'X' (used as H/Hard symbol or just generic) 
-    li $a3, 3      # Red Color ID
-    jal draw_char
+    jal draw_difficulty_selection
 
 menu_input_loop:
     # Check Keyboard
@@ -218,25 +201,25 @@ menu_input_loop:
     lw $t0, KEYBOARD_DATA
     lw $s0, 0($t0)
     
-    # Check Inputs (Use Numbers 1, 2, 3)
-    beq $s0, 0x31, set_easy   # '1'
-    beq $s0, 0x32, set_med    # '2'
-    beq $s0, 0x33, set_hard   # '3'
+    # Select numbers 1-3 for difficulty
+    beq $s0, 0x31, set_easy
+    beq $s0, 0x32, set_med
+    beq $s0, 0x33, set_hard
     
     j menu_wait
 
 set_easy:
-    li $t0, 60                 # Slow (1.0s)
+    li $t0, 60
     sw $t0, gravity_threshold
     j start_game_sequence
 
 set_med:
-    li $t0, 30                 # Med (0.5s)
+    li $t0, 30
     sw $t0, gravity_threshold
     j start_game_sequence
 
 set_hard:
-    li $t0, 10                 # Fast (0.16s)
+    li $t0, 10
     sw $t0, gravity_threshold
     j start_game_sequence
 
@@ -245,56 +228,11 @@ menu_wait:
     li $a0, 50
     syscall
     j menu_input_loop
-    
-    # --- FEATURE 3 END ---
 
 start_game_sequence:
-    # Initialization: These functions run once at the start.
-    jal clear_screen
-    jal draw_background
+    # jal clear_screen
+    # jal draw_background
     jal draw_board
-    # TODO:
-    # - Populate first column slot
-        
-    # li $a0, 5
-    # li $a1, 12
-    # li $a2, 1
-    # jal set_board_value
-    
-    # li $a0, 5
-    # li $a1, 11
-    # li $a2, 2
-    # jal set_board_value
-    
-    # li $a0, 4
-    # li $a1, 12
-    # li $a2, 1
-    # jal set_board_value
-    
-    # li $a0, 4
-    # li $a1, 11
-    # li $a2, 2
-    # jal set_board_value
-    
-    # li $a0, 5
-    # li $a1, 10
-    # li $a2, 1
-    # jal set_board_value
-    
-    # li $a0, 5
-    # li $a1, 9
-    # li $a2, 1
-    # jal set_board_value
-    
-    li $a0, 4
-    li $a1, 12
-    li $a2, 1
-    jal set_board_value
-    
-    li $a0, 5
-    li $a1, 12
-    li $a2, 1
-    jal set_board_value
 
     sw $zero, piece_placed_flag
     
@@ -305,31 +243,26 @@ start_game_sequence:
 # Main Game Loop
 # =======================================================================
 game_loop:
-    # TODO:
-    # - Add cycling inputs
-    jal handle_input
 
-    # TODO:
-    # - Gravity logic
+    lw $t0, piece_placed_flag
+    # Skip input game loop if still placing piece 
+    bne $t0, $zero, skip_game_loop_input
+    jal handle_input
     jal apply_gravity
     
+skip_game_loop_input:
     jal update_game_logic
     
-    # TODO:
-    # - Update game screen
-    # - Add next column display
-    # - Scale up display?
     jal draw_board
     jal draw_score
     
-    # 4. Delay to control game speed (game tick)
+    # Game tick delay
     li $v0, 32
     li $a0, 16 # sleep for 16ms (approx 60 FPS)
     syscall
     
     jal update_frame_counter
     
-    # 5. Repeat
     j game_loop
 
 # =======================================================================
@@ -343,7 +276,7 @@ update_frame_counter:
     lw $t0, game_frame_counter
     addi $t0, $t0, 1
     sw $t0, game_frame_counter
-    bne $t0, 60, end_update_frame_counter
+    bne $t0, 30, end_update_frame_counter
     # Reset frame counter and inc time
     li $t0, 0
     sw $t0, game_frame_counter
@@ -359,18 +292,11 @@ end_update_frame_counter:
 
 # -----------------------------------------------------------------------
 # update_game_logic: Updates the state of the game for one frame.
-# This is where the core game mechanics will be implemented.
 # -----------------------------------------------------------------------
 update_game_logic:
-    # --- SAVE REGISTERS ---
     addi    $sp, $sp, -4
     sw      $ra, 0($sp)
     
-    # TODO: Implement game logic here.
-    # This could include:
-    # - Making pieces fall
-    # - Checking for matches
-    # - Spawning new pieces
     jal check_for_matching
     jal remove_marked_squares
     jal remove_empty_gaps
@@ -383,7 +309,6 @@ game_logic_skip_clear:
 
     
 end_update_game_logic:
-    # --- RESTORE REGISTERS ---
     lw      $ra, 0($sp)
     addi    $sp, $sp, 4
     
@@ -397,58 +322,18 @@ apply_gravity:
     sw   $ra, 0($sp)
     sw   $s0, 4($sp)
 
-    # 1. Update Timer
+    # Update Timer
     lw   $t0, gravity_timer
-    addi $t0, $t0, 1        # Increment timer
-    sw   $t0, gravity_timer # Save it back
+    addi $t0, $t0, 1
+    sw   $t0, gravity_timer
 
-    # 2. Check if we reached the threshold
     lw   $t1, gravity_threshold
-    blt  $t0, $t1, apply_gravity_done # If timer < threshold, exit
-
-    # 3. Trigger Gravity! Reset timer first.
+    blt  $t0, $t1, apply_gravity_done
+ 
+    # reset gravity timer
     sw   $zero, gravity_timer
     
-    # Load current row
-    lw    $s0, cursor_row
-    
-    # Check if we are at the bottom (Row 12)
-    li    $t0, 12
-    beq   $s0, $t0, gravity_collision  # Collision with floor
-    
-    # Calculate potential new row (current + 1)
-    addi  $s0, $s0, 1
-    
-    # Check collision with existing blocks at (cursor_col, new_row)
-    lw    $a0, cursor_col
-    move  $a1, $s0      # The new row
-    jal   read_board_value
-    
-    # If read_board_value returns non-zero ($v0 != 0), we hit a block
-    bne   $v0, $zero, gravity_collision
-    
-    # 5. Move is valid: Update cursor position
-    sw    $s0, cursor_row
-    j     apply_gravity_done
-
-gravity_collision:
-    # We hit somethingm Lock the piece.
-    
-    # 1. Generate the next column immediately
-    jal generate_next_column
-    
-    # 2. Reset cursor to top (hidden position)
-    li $t0, -1
-    sw $t0, cursor_row
-    sw $t0, last_cursor_row
-    li $t0, 3
-    sw $t0, cursor_col
-    sw $t0, last_cursor_col
-    
-    # 3. Set the flag so update_game_logic will check for matches
-    li $t0, 1
-    sw $t0, piece_placed_flag
-    
+    jal attempt_move_down
 
 apply_gravity_done:
     lw   $s0, 4($sp)
@@ -720,28 +605,6 @@ check_for_matching:
     lw $t0, piece_placed_flag
     beq $zero, $t0, end_check_for_matching
     
-# ==========================================================
-# FEATURE 2: GRADUAL SPEED INCREASE
-# ==========================================================
-    # Logic: If we just placed a piece, make the game slightly faster
-    # by decreasing the gravity_threshold.
-    
-    la   $t5, gravity_threshold    # Get address of threshold
-    lw   $t6, 0($t5)               # Load current speed value
-    
-    # Safety Check: Don't let it go below 10 frames 
-    # If we go too low, the game becomes unplayable or glitches.
-    li   $t7, 10
-    ble  $t6, $t7, skip_speed_increase
-    
-    # Decrease threshold by 5 ^^^CHANGE SPEED HERE
-    subi $t6, $t6, 5
-    
-    # Save the new speed back to memory
-    sw   $t6, 0($t5)
-
-skip_speed_increase:
-    
     # We check all columns and all rows
     jal check_rows_for_matching
     jal check_cols_for_matching
@@ -758,6 +621,49 @@ end_check_for_matching:
     lw $s0, 4($sp)
     addi $sp, $sp, 8
     jr $ra
+    
+# -----------------------------------------------------------------------
+# inc_game_score: Incremenet game score according to the following
+#                   score += base_score * D * (2 << L) * (3 << C)
+#                   L = chain length, C = combo length, D = diff
+#   $a0 current length
+#   $a1 colour cleared
+# -----------------------------------------------------------------------
+inc_game_score:
+    addi $sp, $sp, -4
+    sw $ra, 0($sp)
+    
+    blt $a0, 3, end_inc_game_score
+    beq $a1, $zero, end_inc_game_score
+    addi $a0, $a0, -3
+    lw $t0, game_score
+    lw $t1, base_score
+    lw $t2, length_multiplier
+    lw $t3, combo_multiplier
+    lw $t4, current_combo
+    lw $t5, game_level
+    sllv $t2, $t2, $s2 # Score is expontential for longer chains
+    sllv $t3, $t3, $t4 # combo is also exponential
+    mul $t1, $t1, $t2
+    mul $t1, $t1, $t3
+    mul $t1, $t1, $t5
+    
+    addi $t4, $t4, 1
+    sw $t4, current_combo
+
+    add $t0, $t0, $t1
+    sw $t0, game_score
+    
+    lw $t1, game_high_score
+    blt $t0, $t1, end_inc_game_score
+    sw $t0, game_high_score
+    
+end_inc_game_score:
+    lw $ra, 0($sp)
+    addi $sp, $sp, 4
+    
+    jr $ra
+
 
 # -----------------------------------------------------------------------
 # check_rows_for_matching: Check rows
@@ -786,19 +692,20 @@ check_row_square_for_match:
     
     # Skip if colours are the same, otherwise reset
     beq $v0, $s3, check_row_square_for_match_skip_color
+
+    add $a0, $s2, $zero
+    add $a1, $s3, $zero
+    jal inc_game_score
+
     li $s2, 0
     add $s3, $zero, $v0
     
 check_row_square_for_match_skip_color:
-    # cap incremeent at 3
-    li $t0, 3
-    beq $s2, $t0, check_row_square_for_match_skip_increment
+    # incrememnt counter
     addi $s2, $s2, 1
     
-check_row_square_for_match_skip_increment:
-    # if not 3 stored skip backfill
-    li $t0, 3
-    bne $s2, $t0, check_row_square_for_match_skip_fill
+    # if < 3 stored skip backfill
+    blt $s2, 3, check_row_square_for_match_skip_fill
     # skip if colour is black
     beq $s3, $zero, check_row_square_for_match_skip_fill
     
@@ -821,6 +728,10 @@ check_row_square_for_match_skip_fill:
     addi $s1, $s1, 1
     li $t8, 6
     bne $s1, $t8, check_row_square_for_match
+    
+    add $a0, $s2, $zero
+    add $a1, $s3, $zero
+    jal inc_game_score
 
     # increment row
     addi $s0, $s0, 1
@@ -866,19 +777,19 @@ check_col_square_for_match:
     
     # Skip if colours are the same, otherwise reset
     beq $v0, $s3, check_col_square_for_match_skip_color
+    
+    add $a0, $s2, $zero
+    add $a1, $s3, $zero
+    jal inc_game_score
+    
     li $s2, 0
     add $s3, $zero, $v0
     
 check_col_square_for_match_skip_color:
-    # cap incremeent at 3
-    li $t0, 3
-    beq $s2, $t0, check_col_square_for_match_skip_increment
     addi $s2, $s2, 1
     
-check_col_square_for_match_skip_increment:
-    # if not 3 stored skip backfill
-    li $t0, 3
-    bne $s2, $t0, check_col_square_for_match_skip_fill
+    # if < 3 stored skip backfill
+    blt $s2, 3, check_col_square_for_match_skip_fill
     # skip if colour is black
     beq $s3, $zero, check_col_square_for_match_skip_fill
     
@@ -901,6 +812,10 @@ check_col_square_for_match_skip_fill:
     addi $s0, $s0, 1
     li $t8, 13
     bne $s0, $t8, check_col_square_for_match
+
+    add $a0, $s2, $zero
+    add $a1, $s3, $zero
+    jal inc_game_score
 
     # increment col
     addi $s1, $s1, 1
@@ -947,19 +862,20 @@ check_diag_left_up_square_for_match:
     
     # Skip if colours are the same, otherwise reset
     beq $v0, $s3, check_diag_left_up_square_for_match_skip_color
+    
+    add $a0, $s2, $zero
+    add $a1, $s3, $zero
+    jal inc_game_score
+    
     li $s2, 0
     add $s3, $zero, $v0
     
 check_diag_left_up_square_for_match_skip_color:
     # cap increment at 3
-    li $t0, 3
-    beq $s2, $t0, check_diag_left_up_square_for_match_skip_increment
     addi $s2, $s2, 1
     
-check_diag_left_up_square_for_match_skip_increment:
-    # if not 3 stored skip backfill
-    li $t0, 3
-    bne $s2, $t0, check_diag_left_up_square_for_match_skip_fill
+    # if < 3 stored skip backfill
+    blt $s2, 3, check_diag_left_up_square_for_match_skip_fill
     # skip if colour is black
     beq $s3, $zero, check_diag_left_up_square_for_match_skip_fill
     
@@ -981,11 +897,12 @@ check_diag_left_up_square_for_match_skip_fill:
     # increment x, != 6 go back
     addi $s1, $s1, 1
     addi $s0, $s0, -1
-    li $t8, -1
-    beq $s0, $t8, check_diag_left_up_skip_to_next
-    li $t8, 6
-    bne $s1, $t8, check_diag_left_up_square_for_match
+    beq $s0, -1, check_diag_left_up_skip_to_next
+    bne $s1, 6, check_diag_left_up_square_for_match
 check_diag_left_up_skip_to_next:
+    add $a0, $s2, $zero
+    add $a1, $s3, $zero
+    jal inc_game_score
     # increment row
     addi $s4, $s4, 1
     li $t9, 13
@@ -1032,19 +949,20 @@ check_diag_right_bot_square_for_match:
     
     # Skip if colours are the same, otherwise reset
     beq $v0, $s3, check_diag_right_bot_square_for_match_skip_color
+   
+    add $a0, $s2, $zero
+    add $a1, $s3, $zero
+    jal inc_game_score
+    
     li $s2, 0
     add $s3, $zero, $v0
     
 check_diag_right_bot_square_for_match_skip_color:
     # cap increment at 3
-    li $t0, 3
-    beq $s2, $t0, check_diag_right_bot_square_for_match_skip_increment
     addi $s2, $s2, 1
     
-check_diag_right_bot_square_for_match_skip_increment:
-    # if not 3 stored skip backfill
-    li $t0, 3
-    bne $s2, $t0, check_diag_right_bot_square_for_match_skip_fill
+    # if < 3 stored skip backfill
+    blt $s2, 3, check_diag_right_bot_square_for_match_skip_fill
     # skip if colour is black
     beq $s3, $zero, check_diag_right_bot_square_for_match_skip_fill
     
@@ -1066,15 +984,15 @@ check_diag_right_bot_square_for_match_skip_fill:
     # incremenet x, != 6 go back
     addi $s1, $s1, 1
     addi $s0, $s0, -1
-    li $t8, -1
-    beq $s0, $t8, check_diag_right_bot_skip_to_next
-    li $t8, 6
-    bne $s1, $t8, check_diag_right_bot_square_for_match
+    beq $s0, -1, check_diag_right_bot_skip_to_next
+    bne $s1, 6, check_diag_right_bot_square_for_match
 check_diag_right_bot_skip_to_next:
+    add $a0, $s2, $zero
+    add $a1, $s3, $zero
+    jal inc_game_score
     # increment row
     addi $s4, $s4, 1
-    li $t9, 13
-    bne $s4, $t9, check_diag_right_bot_for_matching
+    bne $s4, 6, check_diag_right_bot_for_matching
     
     j end_check_diag_right_bot_for_matching
     
@@ -1117,19 +1035,20 @@ check_diag_left_down_square_for_match:
     
     # Skip if colours are the same, otherwise reset
     beq $v0, $s3, check_diag_left_down_square_for_match_skip_color
+    
+    add $a0, $s2, $zero
+    add $a1, $s3, $zero
+    jal inc_game_score
+    
     li $s2, 0
     add $s3, $zero, $v0
     
 check_diag_left_down_square_for_match_skip_color:
     # cap increment at 3
-    li $t0, 3
-    beq $s2, $t0, check_diag_left_down_square_for_match_skip_increment
     addi $s2, $s2, 1
     
-check_diag_left_down_square_for_match_skip_increment:
-    # if not 3 stored skip backfill
-    li $t0, 3
-    bne $s2, $t0, check_diag_left_down_square_for_match_skip_fill
+    # if < 3 stored skip backfill
+    blt $s2, 3, check_diag_left_down_square_for_match_skip_fill
     # skip if colour is black
     beq $s3, $zero, check_diag_left_down_square_for_match_skip_fill
     
@@ -1151,11 +1070,12 @@ check_diag_left_down_square_for_match_skip_fill:
     # y++ != 13 and x++ != 6 go back 
     addi $s1, $s1, 1 # change x
     addi $s0, $s0, 1 # change y
-    li $t8, 13
-    beq $s0, $t8, check_diag_left_down_skip_to_next
-    li $t8, 6
-    bne $s1, $t8, check_diag_left_down_square_for_match
+    beq $s0, 13, check_diag_left_down_skip_to_next
+    bne $s1, 6, check_diag_left_down_square_for_match
 check_diag_left_down_skip_to_next:
+    add $a0, $s2, $zero
+    add $a1, $s3, $zero
+    jal inc_game_score
     # increment row
     addi $s4, $s4, 1
     li $t9, 13
@@ -1202,19 +1122,20 @@ check_diag_right_top_square_for_match:
     
     # Skip if colours are the same, otherwise reset
     beq $v0, $s3, check_diag_right_top_square_for_match_skip_color
+    
+    add $a0, $s2, $zero
+    add $a1, $s3, $zero
+    jal inc_game_score
+    
     li $s2, 0
     add $s3, $zero, $v0
     
 check_diag_right_top_square_for_match_skip_color:
     # cap increment at 3
-    li $t0, 3
-    beq $s2, $t0, check_diag_right_top_square_for_match_skip_increment
     addi $s2, $s2, 1
     
-check_diag_right_top_square_for_match_skip_increment:
-    # if not 3 stored skip backfill
-    li $t0, 3
-    bne $s2, $t0, check_diag_right_top_square_for_match_skip_fill
+    # if < 3 stored skip backfill
+    blt $s2, 3, check_diag_right_top_square_for_match_skip_fill
     # skip if colour is black
     beq $s3, $zero, check_diag_right_top_square_for_match_skip_fill
     
@@ -1236,15 +1157,15 @@ check_diag_right_top_square_for_match_skip_fill:
     # y++ != 13 and x++ != 6 go back 
     addi $s1, $s1, 1 # change x
     addi $s0, $s0, 1 # change y
-    li $t8, 13
-    beq $s0, $t8, check_diag_right_top_skip_to_next
-    li $t8, 6
-    bne $s1, $t8, check_diag_right_top_square_for_match
+    beq $s0, 13, check_diag_right_top_skip_to_next
+    bne $s1, 6, check_diag_right_top_square_for_match
 check_diag_right_top_skip_to_next:
-    # increment col
+    add $a0, $s2, $zero
+    add $a1, $s3, $zero
+    jal inc_game_score
+    # increment row
     addi $s4, $s4, 1
-    li $t9, 13
-    bne $s4, $t9, check_diag_right_top_for_matching
+    bne $s4, 6, check_diag_right_top_for_matching
     
     j end_check_diag_right_top_for_matching
     
@@ -1257,9 +1178,6 @@ end_check_diag_right_top_for_matching:
     lw $s4, 20($sp)
     addi $sp, $sp, 24
     jr $ra
-
-
-
 
 remove_marked_squares:
     addi  $sp, $sp, -8
@@ -1373,6 +1291,10 @@ end_remove_empty_gaps:
     bne $zero, $t0, skip_reset_piece_placed_flag
     sw $zero, piece_placed_flag
     
+    lw $t0, game_level
+    addi $t0, $t0, 1
+    sw $t0, game_level
+    
     # set cursor to (3, 0)
     sw $zero, cursor_row
     sw $zero, last_cursor_row
@@ -1479,9 +1401,16 @@ move_up_done:
 # move_down: Increments the cursor's row, with bounds checking.
 # -----------------------------------------------------------------------
 move_down:
+    # reset gravity timer when move down
+    jal attempt_move_down
+    lw $zero, gravity_timer
+    j input_done
+
+attempt_move_down:
     # --- SAVE REGISTERS ---
-    addi  $sp, $sp, -4
-    sw    $s0, 0($sp)
+    addi  $sp, $sp, -8
+    sw $ra, 0($sp)
+    sw    $s0, 4($sp)
 
     # Load the current row and check if it's at the bottom (12).
     lw    $s0, cursor_row
@@ -1497,7 +1426,7 @@ move_down:
     
     # Store value
     sw    $s0, cursor_row
-    j move_down_done
+    j end_attempt_move_down
     
 active_botton_collison:
     jal generate_next_column
@@ -1514,17 +1443,34 @@ active_botton_collison:
     li $t0, 1
     sw $t0, piece_placed_flag
     
-    li $v0, 1
-    li $a0, 12
-    syscall
+    # Speed increase when clear
+    la   $t5, gravity_threshold
+    lw   $t6, 0($t5)
     
-    j move_down_done
+    # Cap speed
+    li   $t7, 10
+    ble  $t6, $t7, skip_speed_increase
     
-move_down_done:
-    # --- RESTORE REGISTERS ---
-    lw    $s0, 0($sp)
-    addi  $sp, $sp, 4
-    j     input_done
+    # We want to make this an inverse exponential curve
+    # Set Threshold to 90% every 
+    li  $t1, 10
+    lw  $t2, gravity_threshold 
+    divu  $t2, $t1
+    mflo  $t3                   # percentage 1/10,
+    sub $t6, $t6, $t3
+    
+    sw   $t6, 0($t5)
+
+skip_speed_increase:
+    # Reset combo counter
+    sw $zero, current_combo
+    
+end_attempt_move_down:
+    lw $ra, 0($sp)
+    lw $s0, 4($sp)
+    addi $sp, $sp, 8
+    
+    jr $ra
 
 # -----------------------------------------------------------------------
 # move_left: Decrements the cursor's column, with bounds checking.
@@ -1663,18 +1609,13 @@ draw_pixel:
 get_color:
     addi  $sp, $sp, -4
     sw    $ra, 0($sp)
-    # 1. Calculate Offset: Multiply Index ($a0) by 4
-    #    Bitwise shift left by 2 is the fastest way to multiply by 4
     sll $t0, $a0, 2     
     
-    # 2. Get Base Address of the palette
     la  $t1, COLOUR_PALETTE
     
-    # 3. Add Offset to Base Address
-    add $t2, $t1, $t0   # $t2 = Address of the specific color
+    add $t2, $t1, $t0
     
-    # 4. Load the color value from that address
-    lw  $v0, 0($t2)     # Load value into return register
+    lw  $v0, 0($t2)
     
     lw    $ra, 0($sp)
     addi  $sp, $sp, 4
@@ -1817,11 +1758,11 @@ draw_score_display_loop:
     
     addi $s1, $s1, -4
     bne $s1, 30, draw_score_display_loop
-
-    # Draw level
-    lw $s0, game_level
+    
+    # Hi score
+    lw $s0, game_high_score
     li $s1, 54
-draw_level_display_loop:
+draw_hi_score_display_loop:
     li    $t1, 10
     divu  $s0, $t1
     mflo  $s0                   # s0 // 10
@@ -1832,11 +1773,27 @@ draw_level_display_loop:
     jal draw_number
     
     addi $s1, $s1, -4
-    bne $s1, 30, draw_level_display_loop
+    bne $s1, 30, draw_hi_score_display_loop
+    
+    # Draw level score
+    lw $s0, game_level
+    li $s1, 54
+draw_level_display_loop:
+    li    $t1, 10
+    divu  $s0, $t1
+    mflo  $s0                   # s0 // 10
+    mfhi  $a2                   # s0 % 10
+    
+    addi $a0, $s1, 0
+    li $a1, 47
+    jal draw_number
+    
+    addi $s1, $s1, -4
+    bne $s1, 42, draw_level_display_loop
 
     # Draw time
     lw $s0, game_time
-    li $s1, 54
+    li $s1, 42
 draw_time_display_loop:
     li    $t1, 10
     divu  $s0, $t1
@@ -1863,6 +1820,7 @@ end_draw_score:
 # a0 x-pos
 # a1 y-pos
 # a2 value (0-9)
+# a3 (0 for black backround other for purple)
 # ---
 draw_number:
     addi $sp, $sp, -20
@@ -1878,8 +1836,10 @@ draw_number:
     move $s0, $a0
     move $s1, $a1
     li $s2, 7       # Color: WHITE
+    li $s3, 0
+    beq $a3, $zero, draw_number_branch_num
     li $s3, 59      # Color: Background
-    
+draw_number_branch_num:
     beq $a2, 0, draw_number_0
     beq $a2, 1, draw_number_1
     beq $a2, 2, draw_number_2
@@ -2584,6 +2544,134 @@ end_draw_number:
     jr $ra
 
 # -----------------------------------------------------------------------
+# draw_difficulty_selection: Initial difficulty select screen
+# -----------------------------------------------------------------------
+draw_difficulty_selection:
+    addi $sp, $sp, -4
+    sw $ra, 0($sp)
+    
+    # Draw DIFF in white
+    li $a0, 10
+    li $a1, 10
+    li $a2, 16
+    li $a3, 7
+    jal draw_char
+    li $a0, 13
+    li $a1, 10
+    li $a2, 8
+    li $a3, 7
+    jal draw_char
+    li $a0, 16
+    li $a1, 10
+    li $a2, 17
+    li $a3, 7
+    jal draw_char
+    li $a0, 20
+    li $a1, 10
+    li $a2, 17
+    li $a3, 7
+    jal draw_char
+    
+    # Draw SEL in white
+    li $a0, 18
+    li $a1, 16
+    li $a2, 0
+    li $a3, 7
+    jal draw_char
+    li $a0, 22
+    li $a1, 16
+    li $a2, 4
+    li $a3, 7
+    jal draw_char
+    li $a0, 26
+    li $a1, 16
+    li $a2, 5
+    li $a3, 7
+    jal draw_char
+    
+    # Draw EASY in green
+    li $a0, 9
+    li $a1, 25
+    li $a2, 1
+    li $a3, 0
+    jal draw_number
+    li $a0, 14
+    li $a1, 25
+    li $a2, 4
+    li $a3, 2
+    jal draw_char
+    li $a0, 18
+    li $a1, 25
+    li $a2, 13
+    li $a3, 2
+    jal draw_char
+    li $a0, 22
+    li $a1, 25
+    li $a2, 0
+    li $a3, 2
+    jal draw_char
+    li $a0, 26
+    li $a1, 25
+    li $a2, 15
+    li $a3, 2
+    jal draw_char
+    
+    # Draw MED in yellow
+    li $a0, 9
+    li $a1, 32
+    li $a2, 2
+    li $a3, 0
+    jal draw_number
+    li $a0, 14
+    li $a1, 32
+    li $a2, 9
+    li $a3, 6
+    jal draw_char
+    li $a0, 18
+    li $a1, 32
+    li $a2, 4
+    li $a3, 6
+    jal draw_char
+    li $a0, 22
+    li $a1, 32
+    li $a2, 16
+    li $a3, 6
+    jal draw_char
+    
+    # Draw HARD in red
+    li $a0, 9
+    li $a1, 39
+    li $a2, 3
+    li $a3, 0
+    jal draw_number
+    li $a0, 14
+    li $a1, 39
+    li $a2, 14
+    li $a3, 3
+    jal draw_char
+    li $a0, 18
+    li $a1, 39
+    li $a2, 13
+    li $a3, 3
+    jal draw_char
+    li $a0, 22
+    li $a1, 39
+    li $a2, 3
+    li $a3, 3
+    jal draw_char
+    li $a0, 26
+    li $a1, 39
+    li $a2, 16
+    li $a3, 3
+    jal draw_char
+
+end_draw_diff_select:
+    lw $ra, 0($sp)
+    addi $sp, $sp, 4
+    
+    jr $ra
+
+# -----------------------------------------------------------------------
 # draw_background:
 #   Renders the "Overgrown Lab" UI.
 #   Order:
@@ -2822,27 +2910,27 @@ end_vines:
 
     # --- SCORE ---
     # Label
-    li   $a0, 37
+    li   $a0, 38
     li $a1, 19
     li $a2, 0
     move $a3, $s6
     jal draw_char # S
-    li   $a0, 41
+    li   $a0, 42
     li $a1, 19
     li $a2, 1
     move $a3, $s6
     jal draw_char # C
-    li   $a0, 45
+    li   $a0, 46
     li $a1, 19
     li $a2, 2
     move $a3, $s6
     jal draw_char # O
-    li   $a0, 49
+    li   $a0, 50
     li $a1, 19
     li $a2, 3
     move $a3, $s6
     jal draw_char # R
-    li   $a0, 53
+    li   $a0, 54
     li $a1, 19
     li $a2, 4
     move $a3, $s6
@@ -2854,61 +2942,96 @@ end_vines:
     li $a3, 7
     move $s4, $s7
     jal draw_box_f
-
-    # --- LEVEL ---
+    
+    # --- HISCRE ---
+    li   $a0, 34
+    li $a1, 33
+    li $a2, 14
+    move $a3, $s6
+    jal draw_char # H
+    # Label
+    li   $a0, 38
+    li $a1, 33
+    li $a2, 8
+    move $a3, $s6
+    jal draw_char # I
+    li   $a0, 42
+    li $a1, 33
+    li $a2, 0
+    move $a3, $s6
+    jal draw_char # S
+    li   $a0, 46
+    li $a1, 33
+    li $a2, 1
+    move $a3, $s6
+    jal draw_char # C
+    li   $a0, 50
+    li $a1, 33
+    li $a2, 3
+    move $a3, $s6
+    jal draw_char # R
+    li   $a0, 54
+    li $a1, 33
+    li $a2, 4
+    move $a3, $s6
+    jal draw_char # E
     # Box
     li   $a0, 33
     li $a1, 38
     li $a2, 25
-    li $a3, 7 
+    li $a3, 7
+    move $s4, $s7
+    jal draw_box_f
+    
+    # --- LEVEL ---
+    # Box
+    li $a0, 45
+    li $a1, 46
+    li $a2, 13
+    li $a3, 7
     move $s4, $s7
     jal draw_box_f
     # Label
-    li   $a0, 45
-    li $a1, 33
+    li $a0, 34
+    li $a1, 47
     li $a2, 5 # use 8 for I
     move $a3, $s6
     jal draw_char
-    li   $a0, 49
-    li $a1, 33
+    li $a0, 38
+    li $a1, 47
     li $a2, 6
     move $a3, $s6
     jal draw_char
-    li   $a0, 53
-    li $a1, 33
+    li $a0, 42
+    li $a1, 47
     li $a2, 5
     move $a3, $s6
     jal draw_char
 
     # --- TIME ---
-    # Box
-    li   $a0, 33
+    li $a0, 33
     li $a1, 52
-    li $a2, 25
-    li $a3, 7
+    li $a2, 13
+    li $a3, 7 
     move $s4, $s7
     jal draw_box_f
     # Label
-    li   $a0, 41
-    li $a1, 47
-    li $a2, 7
-    move $a3, $s6
     jal draw_char
-    li   $a0, 45
-    li $a1, 47
-    li $a2, 8
-    move $a3, $s6
-    jal draw_char
-    li   $a0, 49
-    li $a1, 47
-    li $a2, 9
-    move $a3, $s6
-    jal draw_char
-    li   $a0, 53
-    li $a1, 47
+    li   $a0, 46
+    li $a1, 53
+    li $a2, 0
+    move $a3, $s6 
+    jal draw_char # S
+    li   $a0, 50
+    li $a1, 53
     li $a2, 4
     move $a3, $s6
-    jal draw_char
+    jal draw_char # E
+    li   $a0, 54
+    li $a1, 53
+    li $a2, 1
+    move $a3, $s6
+    jal draw_char # C
 
     # --- EPILOGUE ---
     lw   $ra, 0($sp)
@@ -3103,6 +3226,10 @@ draw_char:
     beq $a2, 11, l_X
     beq $a2, 12, l_G
     beq $a2, 13, l_A
+    beq $a2, 14, l_H
+    beq $a2, 15, l_Y
+    beq $a2, 16, l_D
+    beq $a2, 17, l_F
     j l_end
 l_S:
     move $a0, $s0
@@ -3498,6 +3625,114 @@ l_A:
     addi $a1, $s1, 2
     jal draw_pixel
     j l_end
+l_H:
+    move $a0, $s0
+    move $a1, $s1
+    move $a2, $s2
+    jal draw_pixel
+    addi $a0, $s0, 2
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 1
+    jal draw_pixel
+    addi $a0, $s0, 2
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 2
+    jal draw_pixel
+    addi $a0, $s0, 1
+    jal draw_pixel
+    addi $a0, $s0, 2
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 3
+    jal draw_pixel
+    addi $a0, $s0, 2
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 4
+    jal draw_pixel
+    addi $a0, $s0, 2
+    jal draw_pixel
+    j l_end
+l_Y:
+    move $a0, $s0
+    move $a1, $s1
+    move $a2, $s2
+    jal draw_pixel
+    addi $a0, $s0, 2
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 1
+    jal draw_pixel
+    addi $a0, $s0, 2
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 2
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 3
+    jal draw_pixel
+    addi $a0, $s0, 1
+    addi $a1, $s1, 4
+    jal draw_pixel
+    j l_end
+l_D:
+    move $a0, $s0
+    move $a1, $s1
+    move $a2, $s2
+    jal draw_pixel
+    addi $a0, $s0, 1
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 1
+    jal draw_pixel
+    addi $a0, $s0, 2
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 2
+    jal draw_pixel
+    addi $a0, $s0, 2
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 3
+    jal draw_pixel
+    addi $a0, $s0, 2
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 4
+    jal draw_pixel
+    addi $a0, $s0, 1
+    jal draw_pixel
+    addi $a0, $s0, 2
+    jal draw_pixel
+    j l_end
+l_F:
+    move $a0, $s0
+    move $a1, $s1
+    move $a2, $s2
+    jal draw_pixel
+    addi $a0, $s0, 1
+    jal draw_pixel
+    addi $a0, $s0, 2
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 1
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 2
+    jal draw_pixel
+    addi $a0, $s0, 1
+    jal draw_pixel
+    addi $a0, $s0, 2
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 3
+    jal draw_pixel
+    move $a0, $s0
+    addi $a1, $s1, 4
+    jal draw_pixel
+    j l_end
 l_end:
     lw   $ra, 0($sp)
     lw   $s0, 4($sp)
@@ -3559,63 +3794,53 @@ dv_x_end:
     jr   $ra
 
 end_game:
-    # 1. Paint a black box over the play area (approx x=6 to 31, y=6 to 58)
-    li $a0, 6
-    li $a1, 6
-    li $a2, 26    # Width
-    li $a3, 53    # Height
-    li $s5, 0     # Black color 
-    #jal draw_box_f
-    # Drawong text over the mess, it looks cooler. 
-    # Gave up on setting registeers for jal draw_box_f :P
+    # Draw "GAME"
+    li $s6, 7
     
-    # 2. Draw "GAME"
-    li $s6, 3      # RED color for "GAME OVER"
-    
-    li $a0, 10
+    li $a0, 11
     li $a1, 20
     li $a2, 12     # G
     move $a3, $s6
     jal draw_char
     
-    li $a0, 14
+    li $a0, 15
     li $a1, 20
     li $a2, 13     # A
     move $a3, $s6
     jal draw_char
     
-    li $a0, 18
+    li $a0, 19
     li $a1, 20
     li $a2, 9      # M
     move $a3, $s6
     jal draw_char
     
-    li $a0, 22
+    li $a0, 23
     li $a1, 20
     li $a2, 4      # E
     move $a3, $s6
     jal draw_char
 
-    # 3. Draw "OVER"
-    li $a0, 10
+    # Draw "OVER"
+    li $a0, 12
     li $a1, 26
     li $a2, 2      # O
     move $a3, $s6
     jal draw_char
 
-    li $a0, 14
+    li $a0, 16
     li $a1, 26
     li $a2, 6      # V
     move $a3, $s6
     jal draw_char
 
-    li $a0, 18
+    li $a0, 20
     li $a1, 26
     li $a2, 4      # E
     move $a3, $s6
     jal draw_char
 
-    li $a0, 22
+    li $a0, 24
     li $a1, 26
     li $a2, 3      # R
     move $a3, $s6
@@ -3652,10 +3877,16 @@ real_exit:
 # reset_game: Zeros out the board and jumps to main
 # -----------------------------------------------------------------------
 reset_game:
-    # 1. Zero out game_board memory
+    # Clear game board
     la $t0, game_board
     li $t1, 312      # 78 words * 4 bytes
     add $t2, $t0, $t1 # End address
+    
+    # Reset score flags
+    sw $zero, game_time
+    sw $zero, game_score
+    sw $zero, game_level
+    sw $zero, current_combo
     
 reset_loop:
     beq $t0, $t2, reset_done
